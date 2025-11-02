@@ -12,7 +12,7 @@ import sys
 
 # LED Configuration  
 NUM_LED_PER_STRIP = 30
-NUM_STRIPS = 1
+NUM_STRIPS = 6
 TOTAL_LEDS = NUM_LED_PER_STRIP * NUM_STRIPS
 
 # SPI Configuration
@@ -86,6 +86,9 @@ class LEDController:
         print(f"  Speed: {speed/1000000:.1f} MHz")
         print(f"  Mode: {mode}")
         print(f"  Device: /dev/spidev{bus}.{device}")
+        print(f" Number of strips: {NUM_STRIPS}")
+        print(f" Number of LEDs per strip: {NUM_LED_PER_STRIP}")
+        print(f" Total LEDs: {TOTAL_LEDS}")
         
         # Test ping
         try:
@@ -174,10 +177,11 @@ def rainbow_animation(controller, duration=None, speed=0.3, span=None):
     print("Starting rainbow animation...")
     print("Press Ctrl+C to stop\n")
 
-    hue_offset = 0
     start_time = time.time()
     frame_count = 0
-    span_pixels = span if span else max(TOTAL_LEDS, 60)
+    span_pixels = span if span else max(NUM_LED_PER_STRIP, 30)
+    hue_offset = 0.0
+    hue_step = 0.01 * speed
 
     try:
         while True:
@@ -185,14 +189,17 @@ def rainbow_animation(controller, duration=None, speed=0.3, span=None):
                 break
 
             # Calculate colors for all pixels
-            pixel_colors = []
-            for pixel in range(TOTAL_LEDS):
-                hue = (hue_offset + (pixel / span_pixels)) % 1.0
-                pixel_colors.append(hsv_to_rgb(hue, 1.0, 1.0))
+            pixel_colors = [(0, 0, 0)] * TOTAL_LEDS
+
+            for led in range(NUM_LED_PER_STRIP):
+                hue = (hue_offset + (led / span_pixels)) % 1.0
+                color = hsv_to_rgb(hue, 1.0, 1.0)
+                for strip in range(NUM_STRIPS):
+                    pixel_colors[strip * NUM_LED_PER_STRIP + led] = color
 
             controller.set_all_pixels(pixel_colors)
 
-            hue_offset += 0.01 * speed
+            hue_offset += hue_step
             if hue_offset >= 1.0:
                 hue_offset -= 1.0
 
@@ -223,15 +230,19 @@ def test_strips(controller):
     print("Testing each strip individually...")
     
     colors = [
-        (255, 0, 0), (255, 127, 0), (255, 255, 0), (0, 255, 0),
-        (0, 255, 255), (0, 0, 255), (127, 0, 255), (255, 0, 255),
+        (255, 0, 0),
+        (255, 127, 0),
+        (255, 255, 0),
+        (0, 255, 0),
+        (0, 255, 255),
+        (0, 0, 255),
     ]
     
     pixel_buffer = [(0, 0, 0)] * TOTAL_LEDS
 
     for strip in range(NUM_STRIPS):
         print(f"Testing strip {strip}...")
-        r, g, b = colors[strip]
+        r, g, b = colors[strip % len(colors)]
 
         # Update buffer for current strip
         for pixel in range(NUM_LED_PER_STRIP):

@@ -10,15 +10,23 @@
 static constexpr gpio_num_t PIN_SPI_MOSI = GPIO_NUM_9;  // XIAO D10
 static constexpr gpio_num_t PIN_SPI_MISO = GPIO_NUM_8;  // XIAO D9 (unused but required)
 static constexpr gpio_num_t PIN_SPI_SCLK = GPIO_NUM_7;  // XIAO D8
-static constexpr gpio_num_t PIN_SPI_CS   = GPIO_NUM_2;  // XIAO D1
+static constexpr gpio_num_t PIN_SPI_CS   = GPIO_NUM_44;  // XIAO D7 (RX)
 
 // =========================
 // LED configuration
 // =========================
-static constexpr uint8_t NUM_STRIPS         = 1;
+static constexpr uint8_t NUM_STRIPS         = 6;
 static constexpr uint16_t NUM_LED_PER_STRIP = 30;
 static constexpr uint16_t TOTAL_LEDS        = NUM_STRIPS * NUM_LED_PER_STRIP;
-static constexpr uint8_t PIN_LED_DATA       = 5;        // XIAO D4 (GPIO5)
+
+static constexpr gpio_num_t STRIP_DATA_PINS[NUM_STRIPS] = {
+  GPIO_NUM_1,  // D0
+  GPIO_NUM_2,  // D1
+  GPIO_NUM_3,  // D2
+  GPIO_NUM_4,  // D3
+  GPIO_NUM_5,  // D4
+  GPIO_NUM_6   // D5
+};
 static constexpr uint8_t PIN_STATUS_LED     = LED_BUILTIN;
 
 static CRGB leds[TOTAL_LEDS];
@@ -205,8 +213,17 @@ void setup() {
   Serial.println("ESP32-S3 SPI slave LED controller");
   Serial.println("========================================");
 
-  // Init FastLED
-  FastLED.addLeds<NEOPIXEL, PIN_LED_DATA>(leds, TOTAL_LEDS);
+  // Init FastLED for each strip (dedicated GPIOs D0-D5)
+  FastLED.addLeds<NEOPIXEL, GPIO_NUM_1>(leds + (0 * NUM_LED_PER_STRIP), NUM_LED_PER_STRIP);  // Strip 0 on D0
+  FastLED.addLeds<NEOPIXEL, GPIO_NUM_2>(leds + (1 * NUM_LED_PER_STRIP), NUM_LED_PER_STRIP);  // Strip 1 on D1
+  FastLED.addLeds<NEOPIXEL, GPIO_NUM_3>(leds + (2 * NUM_LED_PER_STRIP), NUM_LED_PER_STRIP);  // Strip 2 on D2
+  FastLED.addLeds<NEOPIXEL, GPIO_NUM_4>(leds + (3 * NUM_LED_PER_STRIP), NUM_LED_PER_STRIP);  // Strip 3 on D3
+  FastLED.addLeds<NEOPIXEL, GPIO_NUM_5>(leds + (4 * NUM_LED_PER_STRIP), NUM_LED_PER_STRIP);  // Strip 4 on D4
+  FastLED.addLeds<NEOPIXEL, GPIO_NUM_6>(leds + (5 * NUM_LED_PER_STRIP), NUM_LED_PER_STRIP);  // Strip 5 on D5
+
+  for (uint8_t strip = 0; strip < NUM_STRIPS; ++strip) {
+    Serial.printf("Strip %u -> GPIO%d\n", strip, static_cast<int>(STRIP_DATA_PINS[strip]));
+  }
   FastLED.setBrightness(global_brightness);
   FastLED.clear();
   FastLED.show();
