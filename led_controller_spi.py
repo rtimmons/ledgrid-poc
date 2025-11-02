@@ -12,7 +12,7 @@ import sys
 
 # LED Configuration  
 NUM_LED_PER_STRIP = 30
-NUM_STRIPS = 6
+NUM_STRIPS = 7
 TOTAL_LEDS = NUM_LED_PER_STRIP * NUM_STRIPS
 
 # SPI Configuration
@@ -236,6 +236,7 @@ def test_strips(controller):
         (0, 255, 0),
         (0, 255, 255),
         (0, 0, 255),
+        (255, 0, 255),
     ]
     
     pixel_buffer = [(0, 0, 0)] * TOTAL_LEDS
