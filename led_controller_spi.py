@@ -10,10 +10,9 @@ import argparse
 import spidev
 import sys
 
-# LED Configuration  
-NUM_LED_PER_STRIP = 30
-NUM_STRIPS = 7
-TOTAL_LEDS = NUM_LED_PER_STRIP * NUM_STRIPS
+# LED Configuration defaults
+DEFAULT_LED_PER_STRIP = 500
+DEFAULT_NUM_STRIPS = 7
 
 # SPI Configuration
 SPI_BUS = 0  # SPI bus number (0 = /dev/spidev0.X)
@@ -21,7 +20,12 @@ SPI_DEVICE = 0  # CE0 matches wiring to XIAO GPIO2 (D1)
 SPI_SPEED = 5000000  # 5 MHz default
 SPI_MODE = 3  # CPOL=1, CPHA=1 required by ESP32 slave driver
 
-GLOBAL_OPTS_WITH_VALUE = {"--bus", "--device", "--spi-speed", "--mode", "--brightness"}
+MAX_SPI_TRANSFER = 4096
+MAX_PIXELS_SET_ALL = (MAX_SPI_TRANSFER - 1) // 3
+MAX_PIXELS_PER_RANGE = min(255, (MAX_SPI_TRANSFER - 4) // 3)
+
+GLOBAL_OPTS_WITH_VALUE = {"--bus", "--device", "--spi-speed", "--mode", "--brightness", "--strips", "--leds-per-strip"}
+GLOBAL_BOOL_OPTS = {"--debug"}
 
 
 def _normalize_global_args(argv):
@@ -43,6 +47,11 @@ def _normalize_global_args(argv):
                 i += 2
             else:
                 i += 1
+            continue
+
+        if token in GLOBAL_BOOL_OPTS:
+            front.append(token)
+            i += 1
             continue
 
         matched_prefix = False
@@ -68,39 +77,49 @@ CMD_SHOW = 0x03
 CMD_CLEAR = 0x04
 CMD_SET_RANGE = 0x05
 CMD_SET_ALL = 0x06
+CMD_CONFIG = 0x07
 CMD_PING = 0xFF
 
 
 class LEDController:
     """Control LED strips via SPI"""
     
-    def __init__(self, bus=SPI_BUS, device=SPI_DEVICE, speed=SPI_SPEED, mode=SPI_MODE):
+    def __init__(self, bus=SPI_BUS, device=SPI_DEVICE, speed=SPI_SPEED, mode=SPI_MODE,
+                 strips=DEFAULT_NUM_STRIPS, leds_per_strip=DEFAULT_LED_PER_STRIP,
+                 debug=False):
+        self.debug = debug
         self.spi = spidev.SpiDev()
         self.spi.open(bus, device)
         self.spi.max_speed_hz = speed
         self.spi.mode = mode
         self.spi.bits_per_word = 8
+
+        self.strip_count = strips
+        self.leds_per_strip = leds_per_strip
+        self.total_leds = self.strip_count * self.leds_per_strip
         
-        print(f"SPI Controller initialized")
-        print(f"  Bus: {bus}, Device: {device}")
-        print(f"  Speed: {speed/1000000:.1f} MHz")
-        print(f"  Mode: {mode}")
-        print(f"  Device: /dev/spidev{bus}.{device}")
-        print(f" Number of strips: {NUM_STRIPS}")
-        print(f" Number of LEDs per strip: {NUM_LED_PER_STRIP}")
-        print(f" Total LEDs: {TOTAL_LEDS}")
+        if self.debug:
+            print("SPI Controller initialized")
+            print(f"  Bus: {bus}, Device: {device}")
+            print(f"  Speed: {speed/1000000:.1f} MHz")
+            print(f"  Mode: {mode}")
+            print(f"  Device: /dev/spidev{bus}.{device}")
+            print(f"  Number of strips: {self.strip_count}")
+            print(f"  LEDs per strip: {self.leds_per_strip}")
+            print(f"  Total LEDs: {self.total_leds}")
         
         # Test ping
         try:
             self.spi.xfer2([CMD_PING])
             time.sleep(0.01)
-            print("✓ SPI connection OK\n")
+            if self.debug:
+                print("✓ SPI connection OK\n")
         except Exception as e:
-            print(f"Warning: SPI test failed: {e}\n")
+            print(f"Warning: SPI test failed: {e}\n", file=sys.stderr)
     
     def set_pixel(self, pixel, r, g, b):
         """Set a single pixel color"""
-        if pixel >= TOTAL_LEDS:
+        if pixel >= self.total_leds:
             return
         
         data = [
@@ -131,8 +150,13 @@ class LEDController:
         Set a range of pixels efficiently
         colors: list of (r, g, b) tuples
         """
-        count = min(len(colors), 160)  # Limit to avoid buffer overflow
+        count = min(len(colors), MAX_PIXELS_PER_RANGE)
         
+        if start_pixel >= self.total_leds:
+            return
+
+        count = min(count, self.total_leds - start_pixel)
+
         data = [
             CMD_SET_RANGE,
             (start_pixel >> 8) & 0xFF,
@@ -147,19 +171,48 @@ class LEDController:
         
         self.spi.xfer2(data)
 
+    def configure(self):
+        payload = [
+            CMD_CONFIG,
+            self.strip_count & 0xFF,
+            (self.leds_per_strip >> 8) & 0xFF,
+            self.leds_per_strip & 0xFF,
+            1 if self.debug else 0,
+        ]
+        self.spi.xfer2(payload)
+        time.sleep(0.01)
+        if self.debug:
+            print(f"✓ Configuration sent (strips={self.strip_count}, leds/strip={self.leds_per_strip})")
+
     def set_all_pixels(self, colors):
         """Send all pixels in one SPI transaction"""
-        if len(colors) < TOTAL_LEDS:
-            # Pad with zeros if caller supplied fewer pixels
-            colors = list(colors) + [(0, 0, 0)] * (TOTAL_LEDS - len(colors))
-        elif len(colors) > TOTAL_LEDS:
-            colors = colors[:TOTAL_LEDS]
+        if len(colors) < self.total_leds:
+            colors = list(colors) + [(0, 0, 0)] * (self.total_leds - len(colors))
+        elif len(colors) > self.total_leds:
+            colors = colors[:self.total_leds]
 
-        data = [CMD_SET_ALL]
-        for r, g, b in colors:
-            data.extend([int(r) & 0xFF, int(g) & 0xFF, int(b) & 0xFF])
+        total_pixels = self.total_leds
+        if total_pixels <= MAX_PIXELS_SET_ALL:
+            data = [CMD_SET_ALL]
+            for r, g, b in colors:
+                data.extend([int(r) & 0xFF, int(g) & 0xFF, int(b) & 0xFF])
+            self.spi.xfer2(data)
+        else:
+            start = 0
+            while start < total_pixels:
+                count = min(MAX_PIXELS_PER_RANGE, total_pixels - start)
+                payload = [
+                    CMD_SET_RANGE,
+                    (start >> 8) & 0xFF,
+                    start & 0xFF,
+                    count
+                ]
+                for r, g, b in colors[start:start + count]:
+                    payload.extend([int(r) & 0xFF, int(g) & 0xFF, int(b) & 0xFF])
+                self.spi.xfer2(payload)
+                start += count
 
-        self.spi.xfer2(data)
+            self.spi.xfer2([CMD_SHOW])
     
     def close(self):
         """Close SPI connection"""
@@ -174,12 +227,13 @@ def hsv_to_rgb(h, s, v):
 
 def rainbow_animation(controller, duration=None, speed=0.3, span=None):
     """Rainbow cycle animation"""
-    print("Starting rainbow animation...")
-    print("Press Ctrl+C to stop\n")
+    if controller.debug:
+        print("Starting rainbow animation...")
+        print("Press Ctrl+C to stop\n")
 
     start_time = time.time()
     frame_count = 0
-    span_pixels = span if span else max(NUM_LED_PER_STRIP, 30)
+    span_pixels = span if span else max(controller.leds_per_strip, 30)
     hue_offset = 0.0
     hue_step = 0.01 * speed
 
@@ -189,13 +243,14 @@ def rainbow_animation(controller, duration=None, speed=0.3, span=None):
                 break
 
             # Calculate colors for all pixels
-            pixel_colors = [(0, 0, 0)] * TOTAL_LEDS
+            pixel_colors = [(0, 0, 0)] * controller.total_leds
 
-            for led in range(NUM_LED_PER_STRIP):
+            for led in range(controller.leds_per_strip):
                 hue = (hue_offset + (led / span_pixels)) % 1.0
                 color = hsv_to_rgb(hue, 1.0, 1.0)
-                for strip in range(NUM_STRIPS):
-                    pixel_colors[strip * NUM_LED_PER_STRIP + led] = color
+                for strip in range(controller.strip_count):
+                    idx = strip * controller.leds_per_strip + led
+                    pixel_colors[idx] = color
 
             controller.set_all_pixels(pixel_colors)
 
@@ -205,7 +260,7 @@ def rainbow_animation(controller, duration=None, speed=0.3, span=None):
 
             frame_count += 1
 
-            if frame_count % 100 == 0:
+            if controller.debug and frame_count % 100 == 0:
                 elapsed = time.time() - start_time
                 fps = frame_count / elapsed
                 print(f"FPS: {fps:.1f} | Frames: {frame_count}")
@@ -216,18 +271,21 @@ def rainbow_animation(controller, duration=None, speed=0.3, span=None):
             time.sleep(0.02)
 
     except KeyboardInterrupt:
-        print("\nAnimation stopped")
+        if controller.debug:
+            print("\nAnimation stopped")
 
 
 def solid_color(controller, r, g, b):
     """Set all LEDs to a solid color"""
-    print(f"Setting all LEDs to RGB({r}, {g}, {b})")
-    controller.set_all_pixels([(r, g, b)] * TOTAL_LEDS)
+    if controller.debug:
+        print(f"Setting all LEDs to RGB({r}, {g}, {b})")
+    controller.set_all_pixels([(r, g, b)] * controller.total_leds)
 
 
 def test_strips(controller):
     """Test each strip individually"""
-    print("Testing each strip individually...")
+    if controller.debug:
+        print("Testing each strip individually...")
     
     colors = [
         (255, 0, 0),
@@ -239,26 +297,27 @@ def test_strips(controller):
         (255, 0, 255),
     ]
     
-    pixel_buffer = [(0, 0, 0)] * TOTAL_LEDS
+    pixel_buffer = [(0, 0, 0)] * controller.total_leds
 
-    for strip in range(NUM_STRIPS):
-        print(f"Testing strip {strip}...")
+    for strip in range(controller.strip_count):
+        if controller.debug:
+            print(f"Testing strip {strip}...")
         r, g, b = colors[strip % len(colors)]
 
-        # Update buffer for current strip
-        for pixel in range(NUM_LED_PER_STRIP):
-            pixel_index = strip * NUM_LED_PER_STRIP + pixel
+        for pixel in range(controller.leds_per_strip):
+            pixel_index = strip * controller.leds_per_strip + pixel
             pixel_buffer[pixel_index] = (r, g, b)
 
         controller.set_all_pixels(pixel_buffer)
         time.sleep(0.5)
 
         # Clear this strip in the local buffer for the next iteration
-        for pixel in range(NUM_LED_PER_STRIP):
-            pixel_index = strip * NUM_LED_PER_STRIP + pixel
+        for pixel in range(controller.leds_per_strip):
+            pixel_index = strip * controller.leds_per_strip + pixel
             pixel_buffer[pixel_index] = (0, 0, 0)
     
-    print("Test complete!")
+    if controller.debug:
+        print("Test complete!")
 
 
 def main():
@@ -274,6 +333,11 @@ def main():
                         help=f'SPI mode (default: {SPI_MODE})')
     parser.add_argument('--brightness', type=int, default=50,
                         help='LED brightness 0-255 (default: 50)')
+    parser.add_argument('--strips', type=int, default=DEFAULT_NUM_STRIPS,
+                        help=f'Number of strips (default: {DEFAULT_NUM_STRIPS})')
+    parser.add_argument('--leds-per-strip', type=int, default=DEFAULT_LED_PER_STRIP,
+                        help=f'LEDs per strip (default: {DEFAULT_LED_PER_STRIP})')
+    parser.add_argument('--debug', action='store_true', help='Enable verbose controller output')
     
     subparsers = parser.add_subparsers(dest='command', help='Command to execute')
     
@@ -305,10 +369,14 @@ def main():
     controller = None
     try:
         controller = LEDController(bus=args.bus, device=args.device,
-                                  speed=args.spi_speed, mode=args.mode)
+                                  speed=args.spi_speed, mode=args.mode,
+                                  strips=args.strips, leds_per_strip=args.leds_per_strip,
+                                  debug=args.debug)
 
         controller.set_brightness(args.brightness)
-        print(f"Brightness set to {args.brightness}\n")
+        if controller.debug:
+            print(f"Brightness set to {args.brightness}\n")
+        controller.configure()
 
         if args.command == 'rainbow':
             rainbow_animation(controller,
@@ -320,7 +388,8 @@ def main():
             test_strips(controller)
         elif args.command == 'clear':
             controller.clear()
-            print("All LEDs cleared")
+            if controller.debug:
+                print("All LEDs cleared")
         else:
             rainbow_animation(controller)
 
@@ -331,7 +400,8 @@ def main():
     finally:
         if controller:
             controller.close()
-            print("\nSPI connection closed")
+            if controller.debug:
+                print("\nSPI connection closed")
 
 
 if __name__ == '__main__':
