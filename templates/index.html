@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}LED Grid Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2><i class="fas fa-palette"></i> Available Animations</h2>
+        
+        <div class="row">
+            {% for animation in animations %}
+            <div class="col-md-6 mb-3">
+                <div class="card animation-card h-100" onclick="startAnimation('{{ animation.plugin_name }}')">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-play-circle text-primary"></i>
+                            {{ animation.name }}
+                        </h5>
+                        <p class="card-text">{{ animation.description }}</p>
+                        <small class="text-muted">
+                            <i class="fas fa-user"></i> {{ animation.author }} 
+                            <span class="ms-2"><i class="fas fa-tag"></i> v{{ animation.version }}</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% if not animations %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            No animations found. Upload some animation plugins to get started!
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> System Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Animation Status:</strong><br>
+                    <span class="status-indicator {{ 'status-running' if status.is_running else 'status-stopped' }}"></span>
+                    <span class="status-text">
+                        {% if status.is_running %}
+                            Running: {{ status.current_animation }}
+                        {% else %}
+                            Stopped
+                        {% endif %}
+                    </span>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Performance:</strong><br>
+                    <span class="fps-display">{{ "%.1f"|format(status.actual_fps) }} FPS</span>
+                    <small class="text-muted">(Target: {{ status.target_fps }} FPS)</small>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>LED Configuration:</strong><br>
+                    {{ status.led_info.strip_count }} strips × {{ status.led_info.leds_per_strip }} LEDs<br>
+                    <small class="text-muted">Total: {{ status.led_info.total_leds }} LEDs</small>
+                </div>
+                
+                {% if status.is_running %}
+                <div class="mb-3">
+                    <strong>Runtime:</strong><br>
+                    {{ "%.1f"|format(status.uptime) }}s
+                    <small class="text-muted">({{ status.frame_count }} frames)</small>
+                </div>
+                {% endif %}
+                
+                <div class="d-grid gap-2">
+                    {% if status.is_running %}
+                    <button class="btn btn-danger" onclick="stopAnimation()">
+                        <i class="fas fa-stop"></i> Stop Animation
+                    </button>
+                    {% endif %}
+                    
+                    <button class="btn btn-outline-secondary" onclick="refreshPlugins()">
+                        <i class="fas fa-sync"></i> Refresh Plugins
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        {% if status.is_running and status.animation_info %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-cog"></i> Current Animation</h6>
+            </div>
+            <div class="card-body">
+                <strong>{{ status.animation_info.name }}</strong><br>
+                <small class="text-muted">{{ status.animation_info.description }}</small>
+                
+                <div class="mt-2">
+                    <a href="{{ url_for('control_page') }}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-sliders-h"></i> Adjust Parameters
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-question-circle"></i> Quick Start</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6><i class="fas fa-play"></i> Start Animation</h6>
+                        <p>Click any animation card above to start it immediately with default settings.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6><i class="fas fa-sliders-h"></i> Adjust Parameters</h6>
+                        <p>Use the <a href="{{ url_for('control_page') }}">Control Panel</a> to fine-tune animation parameters in real-time.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6><i class="fas fa-upload"></i> Upload Animations</h6>
+                        <p>Create custom animations and <a href="{{ url_for('upload_page') }}">upload them</a> as Python plugins.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Handle animation card clicks with feedback
+    function startAnimation(name, config = {}) {
+        // Show loading state
+        const cards = document.querySelectorAll('.animation-card');
+        cards.forEach(card => card.style.opacity = '0.6');
+        
+        fetch(`/api/start/${name}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        })
+        .then(r => r.json())
+        .then(result => {
+            if (result.success) {
+                // Show success feedback
+                showToast(`Started animation: ${name}`, 'success');
+            } else {
+                showToast(`Failed to start animation: ${name}`, 'error');
+            }
+        })
+        .catch(error => {
+            showToast(`Error: ${error.message}`, 'error');
+        })
+        .finally(() => {
+            // Restore card opacity
+            cards.forEach(card => card.style.opacity = '1');
+        });
+    }
+    
+    function showToast(message, type = 'info') {
+        // Simple toast notification
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} position-fixed`;
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        toast.innerHTML = `${message} <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>`;
+        document.body.appendChild(toast);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => toast.remove(), 3000);
+    }
+</script>
+{% endblock %}
