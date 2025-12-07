@@ -193,6 +193,10 @@
             this.previewAnimation = null;
             this.fpsCounter = 0;
             this.lastFpsTime = Date.now();
+            this.fetchIntervalMs = 150;   // Limit backend polling to ~6-7 FPS
+            this.renderTimer = null;
+            this.fetchInFlight = false;
+            this.lastFrameData = null;
 
             // LED configuration - will be updated from server
             this.stripCount = 7;
@@ -343,14 +347,42 @@
         async renderLoop() {
             if (!this.isRunning) return;
 
-            const frameData = await this.fetchFrameData();
-            this.renderFrame(frameData);
+            if (this.fetchInFlight) {
+                this.scheduleNextFrame();
+                return;
+            }
+
+            this.fetchInFlight = true;
+            let frameData = null;
+            try {
+                frameData = await this.fetchFrameData();
+            } catch (error) {
+                console.error('Error in render loop:', error);
+            }
+            this.fetchInFlight = false;
+
+            if (frameData) {
+                this.lastFrameData = frameData;
+                this.renderFrame(frameData);
+            } else if (this.lastFrameData) {
+                this.renderFrame(this.lastFrameData);
+            } else {
+                this.renderNoAnimation();
+            }
 
             // Update status
-            this.updateStatusDisplay(frameData);
+            this.updateStatusDisplay(frameData || this.lastFrameData);
 
             // Schedule next frame
-            requestAnimationFrame(() => this.renderLoop());
+            this.scheduleNextFrame();
+        }
+
+        scheduleNextFrame() {
+            if (!this.isRunning) return;
+            if (this.renderTimer) {
+                clearTimeout(this.renderTimer);
+            }
+            this.renderTimer = setTimeout(() => this.renderLoop(), this.fetchIntervalMs);
         }
 
         updateStatusDisplay(frameData = null) {
@@ -369,12 +401,18 @@
         }
 
         startRendering() {
+            if (this.isRunning) return;
             this.isRunning = true;
-            this.renderLoop();
+            this.scheduleNextFrame();
         }
 
         stopRendering() {
             this.isRunning = false;
+            if (this.renderTimer) {
+                clearTimeout(this.renderTimer);
+                this.renderTimer = null;
+            }
+            this.fetchInFlight = false;
         }
 
         reset() {
@@ -382,6 +420,7 @@
             this.fps = 0;
             this.fpsCounter = 0;
             this.lastFpsTime = Date.now();
+            this.lastFrameData = null;
             document.getElementById('rendererFrameCount').textContent = '0 frames';
             document.getElementById('rendererFPS').textContent = '0 FPS';
         }

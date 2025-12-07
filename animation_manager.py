@@ -47,6 +47,40 @@ except ImportError:
             pass
 
 
+class PreviewLEDController:
+    """
+    Lightweight controller used for preview generation.
+    Mirrors the dimensions of the real controller but performs no I/O so preview
+    requests can never block or interfere with the SPI device.
+    """
+    def __init__(self, strips: int, leds_per_strip: int, debug: bool = False):
+        self.strip_count = strips
+        self.leds_per_strip = leds_per_strip
+        self.total_leds = strips * leds_per_strip
+        self.debug = debug
+
+    def set_all_pixels(self, *_args, **_kwargs):
+        pass
+
+    def set_pixel(self, *_args, **_kwargs):
+        pass
+
+    def set_range(self, *_args, **_kwargs):
+        pass
+
+    def set_brightness(self, *_args, **_kwargs):
+        pass
+
+    def show(self, *_args, **_kwargs):
+        pass
+
+    def clear(self, *_args, **_kwargs):
+        pass
+
+    def configure(self, *_args, **_kwargs):
+        pass
+
+
 class AnimationManager:
     """Manages animation playback and plugin system"""
     
@@ -80,6 +114,13 @@ class AnimationManager:
         # Current frame data for web interface
         self.current_frame_data = []
         self.frame_data_lock = threading.Lock()
+
+        # Preview controller avoids hitting the real SPI device during previews
+        self.preview_controller = PreviewLEDController(
+            self.controller.strip_count,
+            self.controller.leds_per_strip,
+            getattr(self.controller, 'debug', False)
+        )
 
         # Load all plugins on startup
         self.refresh_plugins()
@@ -241,9 +282,14 @@ class AnimationManager:
 
         animation_class = self.plugin_loader.loaded_plugins[animation_name]
 
+        # Keep preview controller dimensions in sync with the real controller
+        self.preview_controller.strip_count = self.controller.strip_count
+        self.preview_controller.leds_per_strip = self.controller.leds_per_strip
+        self.preview_controller.total_leds = self.controller.total_leds
+
         try:
             # Create a temporary instance of the animation
-            temp_animation = animation_class(self.controller, {})
+            temp_animation = animation_class(self.preview_controller, {})
 
             # Generate a sample frame
             if hasattr(temp_animation, 'generate_frame'):
