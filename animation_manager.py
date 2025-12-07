@@ -12,7 +12,7 @@ import traceback
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
-from animation_system import AnimationBase, AnimationPluginLoader
+from animation_system import AnimationBase, StatefulAnimationBase, AnimationPluginLoader
 from led_controller_spi import LEDController
 
 
@@ -97,19 +97,27 @@ class AnimationManager:
             # Create animation instance
             self.current_animation = animation_class(self.controller, config or {})
             self.current_animation_name = animation_name
-            
+
+            print(f"🔍 Animation instance created: {type(self.current_animation)}")
+            print(f"🔍 Is StatefulAnimationBase? {isinstance(self.current_animation, StatefulAnimationBase)}")
+
             # Start animation
             self.current_animation.start()
             self.is_running = True
             self.stop_event.clear()
             self.frame_count = 0
             self.start_time = time.time()
-            
-            # Start animation thread
-            self.animation_thread = threading.Thread(target=self._animation_loop, daemon=True)
-            self.animation_thread.start()
-            
-            print(f"✓ Started animation: {animation_name}")
+
+            # Check if this is a stateful animation
+            if isinstance(self.current_animation, StatefulAnimationBase):
+                # Stateful animations manage their own threads and timing
+                print(f"✓ Started stateful animation: {animation_name}")
+            else:
+                # Frame-based animations need the animation loop
+                self.animation_thread = threading.Thread(target=self._animation_loop, daemon=True)
+                self.animation_thread.start()
+                print(f"✓ Started frame-based animation: {animation_name}")
+
             return True
             
         except Exception as e:
@@ -122,20 +130,22 @@ class AnimationManager:
         if self.is_running:
             self.is_running = False
             self.stop_event.set()
-            
+
+            # Stop frame-based animation thread if it exists
             if self.animation_thread and self.animation_thread.is_alive():
                 self.animation_thread.join(timeout=1.0)
-            
+
+            # Stop the animation (stateful animations handle their own threads)
             if self.current_animation:
                 self.current_animation.stop()
                 self.current_animation.cleanup()
                 self.current_animation = None
-            
+
             self.current_animation_name = None
-            
+
             # Clear LEDs
             self.controller.clear()
-            
+
             print("✓ Animation stopped")
     
     def update_animation_parameters(self, params: Dict[str, Any]) -> bool:

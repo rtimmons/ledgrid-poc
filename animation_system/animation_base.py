@@ -5,6 +5,7 @@ Base animation class and plugin system for LED Grid
 
 import time
 import colorsys
+import threading
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any, Optional
 
@@ -147,3 +148,56 @@ class AnimationBase(ABC):
     def get_strip_info(self) -> Tuple[int, int]:
         """Get (strip_count, leds_per_strip)"""
         return self.controller.strip_count, self.controller.leds_per_strip
+
+
+class StatefulAnimationBase(AnimationBase):
+    """
+    Base class for animations that control their own timing and state
+
+    Unlike frame-based animations that generate frames at 50 FPS,
+    stateful animations run their own loop and only update LEDs when needed.
+    This is perfect for animations like strip tests that hold states for seconds.
+    """
+
+    def __init__(self, controller, config: Dict[str, Any] = None):
+        super().__init__(controller, config)
+        self.animation_thread: Optional[threading.Thread] = None
+        self.stop_event = threading.Event()
+
+    @abstractmethod
+    def run_animation(self):
+        """
+        Main animation logic - runs in its own thread
+
+        This method should contain the main animation loop.
+        Check self.stop_event.is_set() periodically to allow clean shutdown.
+        Use self.controller.set_all_pixels() to update LEDs only when needed.
+        """
+        pass
+
+    def generate_frame(self, time_elapsed: float, frame_count: int) -> List[Tuple[int, int, int]]:
+        """
+        Stateful animations don't use frame generation - they control their own timing
+        This method should not be called for stateful animations.
+        """
+        # Return black frame - this shouldn't be used
+        return [(0, 0, 0)] * self.controller.total_leds
+
+    def start(self):
+        """Start the stateful animation in its own thread"""
+        super().start()
+        self.stop_event.clear()
+        self.animation_thread = threading.Thread(target=self.run_animation, daemon=True)
+        self.animation_thread.start()
+
+    def stop(self):
+        """Stop the stateful animation"""
+        super().stop()
+        self.stop_event.set()
+        if self.animation_thread and self.animation_thread.is_alive():
+            self.animation_thread.join(timeout=2.0)
+
+    def cleanup(self):
+        """Clean up the stateful animation"""
+        self.stop()
+        self.animation_thread = None

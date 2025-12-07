@@ -99,28 +99,47 @@ class AnimationWebInterface:
         @self.app.route('/api/upload', methods=['POST'])
         def api_upload_animation():
             """API: Upload new animation plugin"""
+            # Handle JSON code submission
+            if request.is_json:
+                data = request.get_json()
+                if 'name' in data and 'code' in data:
+                    plugin_name = data['name']
+                    content = data['code']
+
+                    success = self.animation_manager.save_animation(plugin_name, content)
+
+                    if success:
+                        # Reload plugins
+                        self.animation_manager.refresh_plugins()
+                        return jsonify({'success': True, 'plugin_name': plugin_name})
+                    else:
+                        return jsonify({'error': 'Failed to save animation'}), 500
+
+                return jsonify({'error': 'Missing name or code in request'}), 400
+
+            # Handle file upload
             if 'file' not in request.files:
                 return jsonify({'error': 'No file provided'}), 400
-            
+
             file = request.files['file']
             if file.filename == '':
                 return jsonify({'error': 'No file selected'}), 400
-            
+
             if file and file.filename.endswith('.py'):
                 filename = secure_filename(file.filename)
                 plugin_name = filename[:-3]  # Remove .py extension
-                
+
                 # Save file content
                 content = file.read().decode('utf-8')
                 success = self.animation_manager.save_animation(plugin_name, content)
-                
+
                 if success:
                     # Reload plugins
                     self.animation_manager.refresh_plugins()
                     return jsonify({'success': True, 'plugin_name': plugin_name})
                 else:
                     return jsonify({'error': 'Failed to save animation'}), 500
-            
+
             return jsonify({'error': 'Invalid file type. Only .py files allowed'}), 400
         
         @self.app.route('/api/reload/<animation_name>', methods=['POST'])

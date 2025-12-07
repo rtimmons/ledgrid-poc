@@ -189,3 +189,7 @@ class AnimationPluginLoader:
         except Exception as e:
             print(f"✗ Failed to save plugin {plugin_name}: {e}")
             return False
+
+    def discover_plugins(self) -> Dict[str, Type[AnimationBase]]:
+        """Discover and return all available plugins"""
+        return self.load_all_plugins()
