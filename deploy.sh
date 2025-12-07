@@ -163,11 +163,59 @@ echo \"\"
 
 STRIPS=\${STRIPS:-7}
 LEDS_PER_STRIP=\${LEDS_PER_STRIP:-20}
+TARGET_FPS=\${TARGET_FPS:-50}
 HOST=\${HOST:-0.0.0.0}
 PORT=\${PORT:-5000}
+CONTROL_FILE=\${CONTROL_FILE:-run_state/control.json}
+STATUS_FILE=\${STATUS_FILE:-run_state/status.json}
+ANIM_DIR=\${ANIM_DIR:-animations}
+POLL_INTERVAL=\${POLL_INTERVAL:-0.5}
+STATUS_INTERVAL=\${STATUS_INTERVAL:-0.5}
+PYTHONUNBUFFERED=1
+export PYTHONUNBUFFERED
 
-# Start the animation server with virtual environment Python
-python start_animation_server.py --host \"\$HOST\" --port \"\$PORT\" --strips \"\$STRIPS\" --leds-per-strip \"\$LEDS_PER_STRIP\"
+mkdir -p \"\$(dirname \"\$CONTROL_FILE\")\" \"\$(dirname \"\$STATUS_FILE\")\"
+
+echo \"🧭 Using control file: \$CONTROL_FILE\"
+echo \"🧭 Using status file : \$STATUS_FILE\"
+echo \"🧭 Animations dir   : \$ANIM_DIR\"
+echo \"\"
+
+# Start controller process
+echo \"▶️  Starting controller (hardware) process...\"
+nohup python start_animation_server.py \\
+    --mode controller \\
+    --control-file \"\$CONTROL_FILE\" \\
+    --status-file \"\$STATUS_FILE\" \\
+    --animations-dir \"\$ANIM_DIR\" \\
+    --strips \"\$STRIPS\" \\
+    --leds-per-strip \"\$LEDS_PER_STRIP\" \\
+    --target-fps \"\$TARGET_FPS\" \\
+    --poll-interval \"\$POLL_INTERVAL\" \\
+    --status-interval \"\$STATUS_INTERVAL\" \\
+    > controller.log 2>&1 &
+echo \$! > run_state/controller.pid
+echo \"    Controller PID: \$(cat run_state/controller.pid)\"
+
+# Start web/preview process (same host/port as before; same-origin so no CORS issues)
+echo \"🌐 Starting web/preview process...\"
+nohup python start_animation_server.py \\
+    --mode web \\
+    --control-file \"\$CONTROL_FILE\" \\
+    --status-file \"\$STATUS_FILE\" \\
+    --animations-dir \"\$ANIM_DIR\" \\
+    --strips \"\$STRIPS\" \\
+    --leds-per-strip \"\$LEDS_PER_STRIP\" \\
+    --host \"\$HOST\" \\
+    --port \"\$PORT\" \\
+    > web.log 2>&1 &
+echo \$! > run_state/web.pid
+echo \"    Web PID: \$(cat run_state/web.pid)\"
+
+echo \"\"
+echo \"Logs:\"
+echo \"  Controller: controller.log\"
+echo \"  Web UI    : web.log\"
 EOF"
 
     # Make startup script executable
