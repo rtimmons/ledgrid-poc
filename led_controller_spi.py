@@ -19,7 +19,7 @@ DEFAULT_NUM_STRIPS = DEFAULT_STRIP_COUNT
 # SPI Configuration
 SPI_BUS = 0  # SPI bus number (0 = /dev/spidev0.X)
 SPI_DEVICE = 0  # CE0 matches wiring to XIAO GPIO2 (D1)
-SPI_SPEED = 5000000  # 5 MHz default
+SPI_SPEED = 8000000  # 8 MHz default
 SPI_MODE = 3  # CPOL=1, CPHA=1 required by ESP32 slave driver
 
 MAX_SPI_TRANSFER = 4096
@@ -106,6 +106,8 @@ class LEDController:
         self.strip_count = strips
         self.leds_per_strip = leds_per_strip
         self.total_leds = self.strip_count * self.leds_per_strip
+        # When True, set_all_pixels already issues CMD_SHOW so callers must not call show()
+        self.inline_show = True
         self.current_brightness = None
         self._last_config_refresh = 0.0
         self._last_brightness_refresh = 0.0

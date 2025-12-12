@@ -390,8 +390,8 @@ class AnimationManager:
                 # Send to LEDs
                 self.controller.set_all_pixels(frame)
 
-                # Some controllers need an explicit show; call if present
-                if hasattr(self.controller, "show"):
+                # Some controllers need an explicit show; skip if controller handles it internally
+                if not getattr(self.controller, "inline_show", False) and hasattr(self.controller, "show"):
                     try:
                         self.controller.show()
                     except Exception:

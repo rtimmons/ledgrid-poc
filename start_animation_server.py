@@ -182,8 +182,8 @@ def main():
                         help='SPI bus number (default: 0)')
     parser.add_argument('--device', type=int, default=0,
                         help='SPI device number (default: 0)')
-    parser.add_argument('--spi-speed', type=int, default=5000000,
-                        help='SPI speed in Hz (default: 5000000)')
+    parser.add_argument('--spi-speed', type=int, default=8000000,
+                        help='SPI speed in Hz (default: 8000000)')
     parser.add_argument('--controller-debug', action='store_true',
                         help='Enable LED controller debug output')
     parser.add_argument('--target-fps', type=int, default=50,

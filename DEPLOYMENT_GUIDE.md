@@ -236,7 +236,7 @@ ssh ledwallleft@ledwallleft.local "cd ledgrid-pod && tail -f animation_system.lo
 Ensure your `led_controller_spi.py` is compatible:
 ```python
 class LEDController:
-    def __init__(self, bus=0, device=0, speed=5000000, **kwargs):
+    def __init__(self, bus=0, device=0, speed=8000000, **kwargs):
         # SPI setup
         
     def set_all_pixels(self, pixel_data):
