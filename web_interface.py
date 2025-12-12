@@ -245,7 +245,8 @@ def create_app(control_channel: FileControlChannel = None,
                port: int = 5000,
                strips: int = DEFAULT_STRIP_COUNT,
                leds_per_strip: int = DEFAULT_LEDS_PER_STRIP,
-               animations_dir: str = 'animations'):
+               animations_dir: str = 'animations',
+               animation_speed_scale: float = 1.0):
     """Factory function to create the web application"""
     if control_channel is None:
         control_channel = FileControlChannel()
@@ -254,7 +255,11 @@ def create_app(control_channel: FileControlChannel = None,
     preview_controller = PreviewLEDController(strips, leds_per_strip)
 
     # Create animation manager (preview only, no hardware access)
-    animation_manager = AnimationManager(preview_controller, plugins_dir=animations_dir)
+    animation_manager = AnimationManager(
+        preview_controller,
+        plugins_dir=animations_dir,
+        animation_speed_scale=animation_speed_scale,
+    )
 
     # Create web interface
     web_interface = AnimationWebInterface(control_channel, animation_manager, host=host, port=port)
@@ -273,9 +278,15 @@ if __name__ == '__main__':
     # LED layout for previews (does not touch hardware)
     parser.add_argument('--strips', type=int, default=DEFAULT_STRIP_COUNT, help='Number of strips')
     parser.add_argument('--leds-per-strip', type=int, default=DEFAULT_LEDS_PER_STRIP, help='LEDs per strip')
+    parser.add_argument('--animation-speed-scale', type=float, default=1.0,
+                        help='Speed multiplier applied to preview animations')
     
     args = parser.parse_args()
     
     # Create and run web interface
-    web_interface = create_app(strips=args.strips, leds_per_strip=args.leds_per_strip)
+    web_interface = create_app(
+        strips=args.strips,
+        leds_per_strip=args.leds_per_strip,
+        animation_speed_scale=args.animation_speed_scale
+    )
     web_interface.run(debug=args.debug)

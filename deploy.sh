@@ -174,7 +174,8 @@ PY
 
 STRIPS=\${STRIPS:-\$DEFAULT_STRIPS}
 LEDS_PER_STRIP=\${LEDS_PER_STRIP:-\$DEFAULT_LEDS_PER_STRIP}
-TARGET_FPS=\${TARGET_FPS:-50}
+TARGET_FPS=\${TARGET_FPS:-40}
+ANIMATION_SPEED_SCALE=\${ANIMATION_SPEED_SCALE:-0.2}
 HOST=\${HOST:-0.0.0.0}
 PORT=\${PORT:-5000}
 CONTROL_FILE=\${CONTROL_FILE:-run_state/control.json}
@@ -202,6 +203,7 @@ nohup python start_animation_server.py \\
     --strips \"\$STRIPS\" \\
     --leds-per-strip \"\$LEDS_PER_STRIP\" \\
     --target-fps \"\$TARGET_FPS\" \\
+    --animation-speed-scale \"\$ANIMATION_SPEED_SCALE\" \\
     --poll-interval \"\$POLL_INTERVAL\" \\
     --status-interval \"\$STATUS_INTERVAL\" \\
     > controller.log 2>&1 &
@@ -217,6 +219,7 @@ nohup python start_animation_server.py \\
     --animations-dir \"\$ANIM_DIR\" \\
     --strips \"\$STRIPS\" \\
     --leds-per-strip \"\$LEDS_PER_STRIP\" \\
+    --animation-speed-scale \"\$ANIMATION_SPEED_SCALE\" \\
     --host \"\$HOST\" \\
     --port \"\$PORT\" \\
     > web.log 2>&1 &

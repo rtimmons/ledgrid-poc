@@ -96,13 +96,15 @@ class AnimationManager:
         "simple_test",
     }
     
-    def __init__(self, controller: LEDController, plugins_dir: str = "animations"):
+    def __init__(self, controller: LEDController, plugins_dir: str = "animations",
+                 animation_speed_scale: float = 1.0):
         """
         Initialize animation manager
         
         Args:
             controller: LED controller instance
             plugins_dir: Directory containing animation plugins
+            animation_speed_scale: Multiplier applied to each animation's speed parameter at start
         """
         self.controller = controller
         self.plugin_loader = AnimationPluginLoader(
@@ -113,9 +115,10 @@ class AnimationManager:
         self.current_animation: Optional[AnimationBase] = None
         self.current_animation_name: Optional[str] = None
         self.is_running = False
-        self.target_fps = 50
+        self.target_fps = 40
         self.frame_count = 0
         self.start_time = 0.0
+        self.animation_speed_scale = animation_speed_scale
         
         # Threading
         self.animation_thread: Optional[threading.Thread] = None
@@ -123,6 +126,9 @@ class AnimationManager:
         
         # Performance tracking
         self.frame_timestamps = deque(maxlen=240)  # ~4 seconds at 60 FPS
+        self.perf_samples = deque(maxlen=300)
+        self.perf_lock = threading.Lock()
+        self._last_perf_sample: Dict[str, float] = {}
 
         # Current frame data for web interface
         self.current_frame_data = []
@@ -148,6 +154,21 @@ class AnimationManager:
             print(f"✗ Error loading plugins: {e}")
             traceback.print_exc()
             return {}
+
+    def _apply_speed_scale(self):
+        """Apply global speed scaling to the current animation if supported"""
+        if not self.current_animation:
+            return
+        if not hasattr(self.current_animation, "params"):
+            return
+        if 'speed' not in self.current_animation.params:
+            return
+        base_speed = self.current_animation.params['speed']
+        scaled_speed = base_speed * self.animation_speed_scale
+        # Prevent negative or zero speeds
+        if scaled_speed <= 0:
+            scaled_speed = base_speed
+        self.current_animation.update_parameters({'speed': scaled_speed})
     
     def list_animations(self) -> List[Dict[str, Any]]:
         """Get list of available animations with metadata"""
@@ -189,6 +210,8 @@ class AnimationManager:
 
             print(f"🔍 Animation instance created: {type(self.current_animation)}")
             print(f"🔍 Is StatefulAnimationBase? {isinstance(self.current_animation, StatefulAnimationBase)}")
+
+            self._apply_speed_scale()
 
             # Ensure controller is configured before frames start flowing
             if hasattr(self.controller, "configure"):
@@ -269,6 +292,7 @@ class AnimationManager:
             'frame_count': self.frame_count,
             'uptime': (time.perf_counter() - self.start_time) if self.is_running else 0,
             'target_fps': self.target_fps,
+            'animation_speed_scale': self.animation_speed_scale,
             'actual_fps': self._calculate_fps(),
             'led_info': {
                 'total_leds': self.controller.total_leds,
@@ -279,6 +303,10 @@ class AnimationManager:
         
         if self.current_animation:
             status['animation_info'] = self.current_animation.get_info()
+
+        performance = self._get_perf_summary()
+        if performance:
+            status['performance'] = performance
         
         return status
 
@@ -373,6 +401,10 @@ class AnimationManager:
 
         while self.is_running and not self.stop_event.is_set():
             loop_start = time.perf_counter()
+            generate_duration = 0.0
+            send_duration = 0.0
+            show_duration = 0.0
+            inline_show = getattr(self.controller, "inline_show", False)
 
             try:
                 if not self.current_animation:
@@ -380,20 +412,26 @@ class AnimationManager:
 
                 # Generate frame
                 time_elapsed = loop_start - self.start_time
+                gen_start = time.perf_counter()
                 colors = self.current_animation.generate_frame(time_elapsed, self.frame_count)
                 frame = self._normalize_frame(colors)
+                generate_duration = time.perf_counter() - gen_start
 
                 # Store frame data for web interface
                 with self.frame_data_lock:
                     self.current_frame_data = frame
 
                 # Send to LEDs
+                send_start = time.perf_counter()
                 self.controller.set_all_pixels(frame)
+                send_duration = time.perf_counter() - send_start
 
                 # Some controllers need an explicit show; skip if controller handles it internally
-                if not getattr(self.controller, "inline_show", False) and hasattr(self.controller, "show"):
+                if not inline_show and hasattr(self.controller, "show"):
                     try:
+                        show_start = time.perf_counter()
                         self.controller.show()
+                        show_duration = time.perf_counter() - show_start
                     except Exception:
                         # Controllers that embed show inside set_all_pixels will ignore this
                         pass
@@ -413,6 +451,15 @@ class AnimationManager:
             sleep_time = max(0.0, target_frame_time - loop_duration)
             if sleep_time > 0:
                 time.sleep(sleep_time)
+
+            self._record_perf_sample({
+                'generate': generate_duration,
+                'send': send_duration,
+                'show': show_duration,
+                'process': loop_duration,
+                'sleep': sleep_time,
+                'frame': loop_duration + sleep_time,
+            })
 
     def _normalize_frame(self, colors: Optional[List[Any]]) -> List[Any]:
         """Ensure frame length matches the LED count and is always a list"""
@@ -447,6 +494,40 @@ class AnimationManager:
         if duration <= 0:
             return 0.0
         return (len(self.frame_timestamps) - 1) / duration
+
+    def _record_perf_sample(self, sample: Dict[str, float]):
+        """Store per-frame timing samples for debugging"""
+        with self.perf_lock:
+            self.perf_samples.append(sample)
+            self._last_perf_sample = sample
+
+    def _get_perf_summary(self) -> Dict[str, Any]:
+        """Summarize recent performance metrics"""
+        with self.perf_lock:
+            if not self.perf_samples:
+                return {}
+
+            count = len(self.perf_samples)
+            totals = {key: 0.0 for key in ('generate', 'send', 'show', 'process', 'sleep', 'frame')}
+            for sample in self.perf_samples:
+                for key in totals.keys():
+                    totals[key] += sample.get(key, 0.0)
+
+            target_frame_ms = 1000.0 / max(1, float(self.target_fps or 1))
+            summary = {
+                'samples': count,
+                'target_frame_ms': target_frame_ms,
+                'controller_inline_show': bool(getattr(self.controller, "inline_show", False)),
+            }
+
+            for key, total in totals.items():
+                summary[f'avg_{key}_ms'] = (total / count) * 1000.0
+
+            if self._last_perf_sample:
+                for key in totals.keys():
+                    summary[f'last_{key}_ms'] = self._last_perf_sample.get(key, 0.0) * 1000.0
+
+            return summary
     
     def save_animation(self, name: str, code: str) -> bool:
         """Save new animation plugin"""

@@ -55,7 +55,11 @@ def run_controller_mode(args):
         leds_per_strip=args.leds_per_strip,
         debug=args.controller_debug,
     )
-    manager = AnimationManager(controller, plugins_dir=args.animations_dir)
+    manager = AnimationManager(
+        controller,
+        plugins_dir=args.animations_dir,
+        animation_speed_scale=args.animation_speed_scale,
+    )
     manager.target_fps = args.target_fps
 
     channel = FileControlChannel(control_path=args.control_file, status_path=args.status_file)
@@ -137,6 +141,7 @@ def run_web_mode(args):
         strips=args.strips,
         leds_per_strip=args.leds_per_strip,
         animations_dir=args.animations_dir,
+        animation_speed_scale=args.animation_speed_scale,
     )
 
     print("🌐 Web/Preview mode")
@@ -186,8 +191,10 @@ def main():
                         help='SPI speed in Hz (default: 8000000)')
     parser.add_argument('--controller-debug', action='store_true',
                         help='Enable LED controller debug output')
-    parser.add_argument('--target-fps', type=int, default=50,
-                        help='Target animation FPS (default: 50)')
+    parser.add_argument('--target-fps', type=int, default=40,
+                        help='Target animation FPS (default: 40)')
+    parser.add_argument('--animation-speed-scale', type=float, default=0.2,
+                        help='Multiplier applied to each animation\'s speed parameter (default: 0.2)')
     parser.add_argument('--poll-interval', type=float, default=0.5,
                         help='Seconds between control-file polls (controller mode)')
     parser.add_argument('--status-interval', type=float, default=0.5,
