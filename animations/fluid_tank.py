@@ -143,7 +143,10 @@ class FluidTankAnimation(AnimationBase):
         self.hole_open_time = 0.0
 
     def _spawn_drops(self, dt: float, speed: float):
-        rate = max(0.5, float(self.params.get('drop_rate', 3.0))) * speed
+        base_rate = max(0.5, float(self.params.get('drop_rate', 3.0)))
+        # Scale drop rate with area so larger grids still visibly fill.
+        area_scale = max(1.0, (self.width * self.height) / (7 * 20))
+        rate = base_rate * math.sqrt(area_scale) * speed
         self.drop_accumulator += dt * rate
         while self.drop_accumulator >= 1.0:
             self.drop_accumulator -= 1.0
