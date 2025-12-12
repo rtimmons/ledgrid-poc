@@ -127,6 +127,9 @@ def handle_command(manager: AnimationManager, action: str, data: dict):
         else:
             print("🔄 Refresh all plugins")
             manager.refresh_plugins()
+    elif action == 'puncture_hole':
+        print("💥 Random hole requested")
+        manager.trigger_random_hole()
     else:
         print(f"⚠️ Unknown action: {action}")
 

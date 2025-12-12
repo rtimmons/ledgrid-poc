@@ -5,8 +5,8 @@
 {% block content %}
 <!-- Animation Renderer -->
 <div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
+    <div class="col-lg-8 mb-3 mb-lg-0">
+        <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5><i class="fas fa-tv"></i> Live Animation Preview</h5>
                 <div class="btn-group btn-group-sm" role="group">
@@ -23,8 +23,11 @@
             </div>
             <div class="card-body" id="rendererContainer">
                 <div id="animationRenderer" class="text-center">
-                    <canvas id="ledCanvas" width="1200" height="600" style="border: 1px solid #ddd; border-radius: 5px; max-width: 100%;"></canvas>
+                    <canvas id="ledCanvas" width="900" height="900" class="led-preview" style="border: 1px solid #ddd; border-radius: 8px; max-width: 100%; cursor: pointer;"></canvas>
                     <div class="mt-2">
+                        <small class="text-muted d-block">
+                            Canvas rotated to match the physical panel. Click anywhere to punch a random hole during the live scene.
+                        </small>
                         <small class="text-muted">
                             <span id="rendererStatus">Waiting for animation...</span> |
                             <span id="rendererFPS">0 FPS</span> |
@@ -35,49 +38,44 @@
             </div>
         </div>
     </div>
-</div>
-
-<div class="row">
-    <div class="col-md-8">
-        <h2><i class="fas fa-palette"></i> Available Animations</h2>
-        
-        <div class="row">
-            {% for animation in animations %}
-            <div class="col-md-6 mb-3">
-                <div class="card animation-card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="fas fa-play-circle text-primary"></i>
-                            {{ animation.name }}
-                        </h5>
-                        <p class="card-text">{{ animation.description }}</p>
-                        <small class="text-muted">
-                            <i class="fas fa-user"></i> {{ animation.author }}
-                            <span class="ms-2"><i class="fas fa-tag"></i> v{{ animation.version }}</span>
-                        </small>
-                        <div class="mt-3 d-flex gap-2">
-                            <button class="btn btn-outline-primary btn-sm" onclick="previewAnimation('{{ animation.plugin_name }}')">
-                                <i class="fas fa-eye"></i> Preview
-                            </button>
-                            <button class="btn btn-primary btn-sm" onclick="startAnimation('{{ animation.plugin_name }}')">
-                                <i class="fas fa-play"></i> Start
-                            </button>
-                        </div>
-                    </div>
-                </div>
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-tint"></i> Scene Controls & Stats</h5>
+                <button class="btn btn-sm btn-outline-danger" onclick="requestRandomHole()">
+                    <i class="fas fa-bolt"></i> Punch Hole
+                </button>
             </div>
-            {% endfor %}
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <span>Fill Level</span>
+                    <strong id="statFill">--</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <span>On-Schedule</span>
+                    <strong id="statExpected">--</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <span>Hole Active</span>
+                    <strong id="statHole">--</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <span>Bubbles (rise)</span>
+                    <strong id="statBubbles">--</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                    <span>Spray Particles</span>
+                    <strong id="statSpray">--</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>Spawn Allowed</span>
+                    <strong id="statSpawnAllowed">--</strong>
+                </div>
+                <small class="text-muted d-block mt-2">
+                    Stats update live from <code>/api/stats</code> so hardware and simulator stay in sync.
+                </small>
+            </div>
         </div>
-        
-        {% if not animations %}
-        <div class="alert alert-warning">
-            <i class="fas fa-exclamation-triangle"></i>
-            No animations found. Upload some animation plugins to get started!
-        </div>
-        {% endif %}
-    </div>
-    
-    <div class="col-md-4">
         <div class="card">
             <div class="card-header">
                 <h5><i class="fas fa-info-circle"></i> System Status</h5>
@@ -115,6 +113,13 @@
                 </div>
                 {% endif %}
                 
+                {% if status.is_running and status.animation_info %}
+                <div class="mb-3">
+                    <strong>{{ status.animation_info.name }}</strong><br>
+                    <small class="text-muted">{{ status.animation_info.description }}</small>
+                </div>
+                {% endif %}
+                
                 <div class="d-grid gap-2">
                     {% if status.is_running %}
                     <button class="btn btn-danger" onclick="stopAnimation()">
@@ -125,25 +130,51 @@
                     <button class="btn btn-outline-secondary" onclick="refreshPlugins()">
                         <i class="fas fa-sync"></i> Refresh Plugins
                     </button>
-                </div>
-            </div>
-        </div>
-        
-        {% if status.is_running and status.animation_info %}
-        <div class="card mt-3">
-            <div class="card-header">
-                <h6><i class="fas fa-cog"></i> Current Animation</h6>
-            </div>
-            <div class="card-body">
-                <strong>{{ status.animation_info.name }}</strong><br>
-                <small class="text-muted">{{ status.animation_info.description }}</small>
-                
-                <div class="mt-2">
-                    <a href="{{ url_for('control_page') }}" class="btn btn-sm btn-primary">
-                        <i class="fas fa-sliders-h"></i> Adjust Parameters
+                    <a href="{{ url_for('control_page') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-sliders-h"></i> Control Panel
                     </a>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-palette"></i> Available Animations</h2>
+        
+        <div class="row">
+            {% for animation in animations %}
+            <div class="col-md-6 mb-3">
+                <div class="card animation-card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-play-circle text-primary"></i>
+                            {{ animation.name }}
+                        </h5>
+                        <p class="card-text">{{ animation.description }}</p>
+                        <small class="text-muted">
+                            <i class="fas fa-user"></i> {{ animation.author }}
+                            <span class="ms-2"><i class="fas fa-tag"></i> v{{ animation.version }}</span>
+                        </small>
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-outline-primary btn-sm" onclick="previewAnimation('{{ animation.plugin_name }}')">
+                                <i class="fas fa-eye"></i> Preview
+                            </button>
+                            <button class="btn btn-primary btn-sm" onclick="startAnimation('{{ animation.plugin_name }}')">
+                                <i class="fas fa-play"></i> Start
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        {% if not animations %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            No animations found. Upload some animation plugins to get started!
         </div>
         {% endif %}
     </div>
@@ -206,30 +237,29 @@
             this.ledsPerStrip = INITIAL_LEDS_PER_STRIP;
             this.totalLeds = this.stripCount * this.ledsPerStrip;
 
-            // Rendering configuration - larger LEDs with tight spacing
-            this.ledSize = 6;           // Larger LED size
-            this.ledSpacing = 0.5;      // Very tight spacing between LEDs in a strip
-            this.stripSpacing = 1;      // Very tight spacing between strips (less than 1/5 of LED size)
+            // Rendering configuration
+            this.ledSize = 6;
+            this.ledSpacing = 0.5;
+            this.stripSpacing = 1;
+            this.canvas.addEventListener('click', () => requestRandomHole());
 
             this.setupCanvas();
             this.startRendering();
         }
 
         setupCanvas() {
-            // Calculate canvas dimensions based on LED layout
-            const stripWidth = this.ledsPerStrip * (this.ledSize + this.ledSpacing);
-            const totalHeight = this.stripCount * (this.ledSize + this.stripSpacing);
+            // Calculate canvas dimensions based on rotated LED layout (strips run horizontally)
+            const totalWidth = this.stripCount * (this.ledSize + this.stripSpacing);
+            const totalHeight = this.ledsPerStrip * (this.ledSize + this.ledSpacing);
 
-            // Set canvas size - much larger canvas
-            this.canvas.width = Math.min(stripWidth, 1400);
-            this.canvas.height = Math.min(totalHeight, 700);
+            this.canvas.width = Math.min(totalWidth * 6, 900);
+            this.canvas.height = Math.min(totalHeight * 4, 900);
 
             // Scale LEDs to fit canvas
-            this.scaleX = this.canvas.width / stripWidth;
+            this.scaleX = this.canvas.width / totalWidth;
             this.scaleY = this.canvas.height / totalHeight;
             this.scale = Math.min(this.scaleX, this.scaleY);
 
-            // Recalculate LED size based on scale
             this.actualLedSize = Math.max(1, this.ledSize * this.scale);
             this.actualLedSpacing = this.ledSpacing * this.scale;
             this.actualStripSpacing = this.stripSpacing * this.scale;
@@ -308,8 +338,8 @@
         }
 
         renderLED(strip, led, r, g, b) {
-            const x = led * (this.actualLedSize + this.actualLedSpacing);
-            const y = strip * (this.actualLedSize + this.actualStripSpacing);
+            const x = strip * (this.actualLedSize + this.actualStripSpacing);
+            const y = (this.ledsPerStrip - 1 - led) * (this.actualLedSize + this.actualLedSpacing);
 
             this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
             this.ctx.fillRect(x, y, this.actualLedSize, this.actualLedSize);
@@ -326,8 +356,8 @@
 
             for (let strip = 0; strip < this.stripCount; strip++) {
                 for (let led = 0; led < Math.min(this.ledsPerStrip, 100); led += 10) {
-                    const x = led * (this.actualLedSize + this.actualLedSpacing);
-                    const y = strip * (this.actualLedSize + this.actualStripSpacing);
+                    const x = strip * (this.actualLedSize + this.actualStripSpacing);
+                    const y = (this.ledsPerStrip - 1 - led) * (this.actualLedSize + this.actualLedSpacing);
                     this.ctx.strokeRect(x, y, this.actualLedSize, this.actualLedSize);
                 }
             }
@@ -429,12 +459,14 @@
         }
     }
 
-    // Global renderer instance
+    // Global renderer & stats polling
     let animationRenderer = null;
+    let statsPollTimer = null;
 
     // Initialize renderer when page loads
     document.addEventListener('DOMContentLoaded', function() {
         animationRenderer = new LEDAnimationRenderer('ledCanvas');
+        startStatsPolling();
     });
 
     // Renderer control functions
@@ -518,6 +550,63 @@
             // Restore card opacity
             cards.forEach(card => card.style.opacity = '1');
         });
+    }
+
+    function requestRandomHole() {
+        fetch('/api/hole', {method: 'POST'})
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    if (typeof showToast === 'function') {
+                        showToast('Punched a random hole', 'success');
+                    }
+                }
+            })
+            .catch(error => console.error('Failed to punch hole', error));
+    }
+
+    function startStatsPolling() {
+        fetchSceneStats();
+        if (statsPollTimer) {
+            clearInterval(statsPollTimer);
+        }
+        statsPollTimer = setInterval(fetchSceneStats, 2000);
+    }
+
+    async function fetchSceneStats() {
+        try {
+            const response = await fetch('/api/stats');
+            if (!response.ok) return;
+            const data = await response.json();
+            updateSceneStatsPanel(data);
+        } catch (err) {
+            console.error('Failed to fetch stats', err);
+        }
+    }
+
+    function updateSceneStatsPanel(payload) {
+        if (!payload) return;
+        const stats = payload.stats || {};
+        safeSetText('statFill', stats.fill_ratio != null ? formatPercent(stats.fill_ratio) : '--');
+        const expected = stats.expected_ratio != null ? formatPercent(stats.expected_ratio) : '--';
+        safeSetText('statExpected', expected);
+        safeSetText('statHole', stats.hole_active ? 'Yes' : 'No');
+        const bubbleRise = stats.max_bubble_rise ? `${(stats.max_bubble_rise || 0).toFixed(1)}px` : '0px';
+        const bubbleLabel = `${stats.bubble_count || 0} (${bubbleRise})`;
+        safeSetText('statBubbles', bubbleLabel);
+        safeSetText('statSpray', stats.spray_particle_count != null ? stats.spray_particle_count : '--');
+        safeSetText('statSpawnAllowed', stats.spawn_allowed === false ? 'Paused' : 'Yes');
+    }
+
+    function safeSetText(id, value) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.textContent = value;
+        }
+    }
+
+    function formatPercent(value) {
+        return `${Math.round(value * 100)}%`;
     }
     
     function showToast(message, type = 'info') {

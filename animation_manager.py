@@ -318,6 +318,18 @@ class AnimationManager:
         
         return status
 
+    def trigger_random_hole(self):
+        """Request the current animation to spawn a random puncture if supported."""
+        if not self.current_animation:
+            return False
+        if hasattr(self.current_animation, 'trigger_random_hole'):
+            try:
+                self.current_animation.trigger_random_hole()
+                return True
+            except Exception as exc:
+                print(f"⚠️ Failed to trigger hole: {exc}")
+        return False
+
     def get_current_frame(self) -> Dict[str, Any]:
         """Get current animation frame data for web rendering"""
         with self.frame_data_lock:

@@ -109,6 +109,28 @@ class AnimationWebInterface:
                 'target_fps': status.get('target_fps'),
                 'actual_fps': status.get('actual_fps'),
                 'stats': status.get('animation_stats') or {},
+                'timestamp': status.get('updated_at') or status.get('timestamp'),
+                'led_info': status.get('led_info')
+            })
+        
+        @self.app.route('/api/hole', methods=['POST'])
+        def api_trigger_hole():
+            """API: Ask the running animation to punch a random hole"""
+            self.control_channel.send_command('puncture_hole')
+            return jsonify({'success': True})
+        
+        @self.app.route('/api/stats')
+        def api_get_stats():
+            """API: Get runtime stats for the active animation"""
+            status = self.control_channel.read_status() or self._empty_status()
+            return jsonify({
+                'current_animation': status.get('current_animation'),
+                'is_running': status.get('is_running'),
+                'frame_count': status.get('frame_count'),
+                'uptime': status.get('uptime'),
+                'target_fps': status.get('target_fps'),
+                'actual_fps': status.get('actual_fps'),
+                'stats': status.get('animation_stats') or {},
                 'timestamp': status.get('updated_at') or status.get('timestamp')
             })
 

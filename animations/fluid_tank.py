@@ -9,6 +9,7 @@ hole once full.
 
 import math
 import random
+import time
 from typing import List, Tuple, Dict, Optional, Any
 from animation_system import AnimationBase
 from led_layout import DEFAULT_STRIP_COUNT, DEFAULT_LEDS_PER_STRIP
@@ -79,8 +80,10 @@ class FluidTankAnimation(AnimationBase):
         self.last_fill_stats: Dict[str, Any] = {}
         self.last_stats: Dict[str, Any] = {}
         self.spray_particles: List[Dict[str, float]] = []
+        self.drop_glow: List[Dict[str, float]] = []
         self.max_bubble_rise = 0.0
         self.last_spray_time = 0.0
+        self.last_manual_hole_time = 0.0
 
         self._reset_state()
 
@@ -95,19 +98,19 @@ class FluidTankAnimation(AnimationBase):
     def get_parameter_schema(self) -> Dict[str, Dict[str, Any]]:
         schema = super().get_parameter_schema()
         schema.update({
-            'drop_rate': {'type': 'float', 'min': 0.1, 'max': 20.0, 'default': 1.0, 'description': 'Multiplier on the computed fill rate (1.0 ≈ 60s fill)'},
-            'target_fill_time': {'type': 'float', 'min': 5.0, 'max': 600.0, 'default': 60.0, 'description': 'Seconds to fill the entire display'},
-            'flow_steps': {'type': 'int', 'min': 1, 'max': 8, 'default': 2, 'description': 'Physics iterations per frame'},
-            'bubble_interval': {'type': 'float', 'min': 0.3, 'max': 8.0, 'default': 2.4, 'description': 'Seconds between bottom bubbles'},
-            'bubble_strength': {'type': 'float', 'min': 0.2, 'max': 2.5, 'default': 1.2, 'description': 'Ripple energy from surfacing bubbles'},
-            'ripple_damping': {'type': 'float', 'min': 0.90, 'max': 0.999, 'default': 0.985, 'description': 'How quickly ripples fade'},
-            'ripple_speed': {'type': 'float', 'min': 0.05, 'max': 1.2, 'default': 0.28, 'description': 'Wave propagation speed'},
-            'surface_shimmer': {'type': 'float', 'min': 0.0, 'max': 1.5, 'default': 0.35, 'description': 'Extra sparkle on surface crests'},
-            'foam_bias': {'type': 'float', 'min': 0.0, 'max': 1.0, 'default': 0.25, 'description': 'How quickly ripples turn to foam'},
-            'full_threshold': {'type': 'float', 'min': 0.5, 'max': 1.0, 'default': 0.94, 'description': 'Fill level that triggers draining'},
-            'hole_flash_duration': {'type': 'float', 'min': 0.1, 'max': 2.0, 'default': 0.45, 'description': 'Flash duration when the hole seals'},
-            'hole_cooldown': {'type': 'float', 'min': 0.5, 'max': 10.0, 'default': 2.0, 'description': 'Delay before another puncture'},
-            'target_drain_time': {'type': 'float', 'min': 0.5, 'max': 10.0, 'default': 3.0, 'description': 'Seconds to drain the full tank once punctured'},
+            'drop_rate': {'type': 'float', 'min': 0.1, 'max': 20.0, 'default': 1.0, 'description': 'Fill-speed multiplier (0.5≈2 min calm fill, 1.0≈60s, 5+ = torrential downpour)'},
+            'target_fill_time': {'type': 'float', 'min': 5.0, 'max': 600.0, 'default': 60.0, 'description': 'Seconds for a full tank when drop_rate=1. Longer = meditative trickle, shorter = chaotic storm.'},
+            'flow_steps': {'type': 'int', 'min': 1, 'max': 8, 'default': 2, 'description': 'Physics passes per frame. Low = chunky, High = buttery smooth (at the expense of CPU).'},
+            'bubble_interval': {'type': 'float', 'min': 0.3, 'max': 8.0, 'default': 2.4, 'description': 'Seconds between bubble spawns. Smaller values create frothy aeration, higher values feel calm.'},
+            'bubble_strength': {'type': 'float', 'min': 0.2, 'max': 2.5, 'default': 1.2, 'description': 'Ripple energy from surfacing bubbles (0.2 = gentle, 2.5 = geyser).'},
+            'ripple_damping': {'type': 'float', 'min': 0.90, 'max': 0.999, 'default': 0.985, 'description': 'How quickly waves fade. Lower = choppy, higher = glassy, longer-lasting ripples.'},
+            'ripple_speed': {'type': 'float', 'min': 0.05, 'max': 1.2, 'default': 0.28, 'description': 'Wave propagation speed through the liquid body.'},
+            'surface_shimmer': {'type': 'float', 'min': 0.0, 'max': 1.5, 'default': 0.35, 'description': 'Extra sparkle on surface crests. Higher adds glittery highlights.'},
+            'foam_bias': {'type': 'float', 'min': 0.0, 'max': 1.0, 'default': 0.25, 'description': 'How quickly ripples turn into white foam. 0 = crystal clear, 1 = foamy.'},
+            'full_threshold': {'type': 'float', 'min': 0.5, 'max': 1.0, 'default': 0.94, 'description': 'Fill level that triggers draining (1.0 = brim, 0.8 = earlier breaches).'},
+            'hole_flash_duration': {'type': 'float', 'min': 0.1, 'max': 2.0, 'default': 0.45, 'description': 'How long the sealing flash lingers after a hole closes.'},
+            'hole_cooldown': {'type': 'float', 'min': 0.5, 'max': 10.0, 'default': 2.0, 'description': 'Minimum seconds before another puncture may spawn automatically.'},
+            'target_drain_time': {'type': 'float', 'min': 0.5, 'max': 10.0, 'default': 3.0, 'description': 'Seconds to drain the entire tank once punctured.'},
             'serpentine': {'type': 'bool', 'default': False, 'description': 'Flip every other strip for serpentine wiring'}
         })
         return schema
@@ -149,6 +152,7 @@ class FluidTankAnimation(AnimationBase):
         self._inject_ripples()
         self._update_ripples(dt_scaled)
         self._update_bubbles(dt_scaled, time_elapsed)
+        self._update_drop_glow(dt_physics)
         self._update_spray_particles(dt_physics)
         self._update_hole_timers(dt_scaled, time_elapsed)
         self._snapshot_stats(
@@ -187,8 +191,10 @@ class FluidTankAnimation(AnimationBase):
         self.last_fill_stats = {}
         self.last_stats = {}
         self.spray_particles = []
+        self.drop_glow = []
         self.max_bubble_rise = 0.0
         self.last_spray_time = 0.0
+        self.last_manual_hole_time = 0.0
 
     def _spawn_drops(self, dt: float):
         fill_time = max(5.0, float(self.params.get('target_fill_time', 60.0)))
@@ -201,11 +207,12 @@ class FluidTankAnimation(AnimationBase):
             self._add_water_pixel(random.randrange(self.width))
 
     def _add_water_pixel(self, x: int):
-        for y in range(self.height - 1, -1, -1):
+        for y in range(self.height):
             if self._is_hole_cell(x, y):
                 continue
             if self.water[y][x] == 0:
                 self.water[y][x] = 1
+                self.drop_glow.append({'x': x, 'y': y, 'life': 0.35, 'max_life': 0.35, 'intensity': 1.0})
                 break
 
     def _flow_iteration(self):
@@ -370,6 +377,18 @@ class FluidTankAnimation(AnimationBase):
                 continue
             active.append(particle)
         self.spray_particles = active
+    
+    def _update_drop_glow(self, dt: float):
+        if not self.drop_glow:
+            return
+        updated: List[Dict[str, float]] = []
+        for glow in self.drop_glow:
+            glow['life'] -= dt
+            if glow['life'] <= 0.0:
+                continue
+            glow['intensity'] = max(0.0, glow['life'] / glow.get('max_life', 0.4))
+            updated.append(glow)
+        self.drop_glow = updated
 
     def _fill_ratio(self) -> float:
         total = self.width * self.height
@@ -383,14 +402,20 @@ class FluidTankAnimation(AnimationBase):
             return
         if self._fill_ratio() < float(self.params.get('full_threshold', 0.94)):
             return
+        self._activate_hole(time_elapsed)
 
-        y_min = max(0, int(self.height * 0.9))
-        cy = random.randint(y_min, max(y_min, self.height - 1))
-        margin = max(2, int(math.ceil(self.hole_radius)))
-        if self.width > margin * 2:
-            cx = random.randint(margin, self.width - margin - 1)
-        else:
-            cx = random.randint(0, self.width - 1)
+    def _activate_hole(self, time_elapsed: float, cx: Optional[int] = None, cy: Optional[int] = None, force: bool = False) -> bool:
+        if self.hole_active or (not force and (self.hole_flash_timer > 0.0 or self.hole_cooldown_timer > 0.0)):
+            return False
+
+        if cx is None or cy is None:
+            y_min = max(0, int(self.height * 0.85))
+            cy = random.randint(y_min, max(y_min, self.height - 1))
+            margin = max(2, int(math.ceil(self.hole_radius)))
+            if self.width > margin * 2:
+                cx = random.randint(margin, self.width - margin - 1)
+            else:
+                cx = random.randint(0, self.width - 1)
 
         self.hole_position = (float(cx), float(cy))
         self.hole_active = True
@@ -400,7 +425,14 @@ class FluidTankAnimation(AnimationBase):
         self.hole_open_time = time_elapsed
         self.awaiting_cycle_reset = True
         self.fill_correction_rate = 0.0
-        self._queue_ripple(cx, cy, 1.4)
+        self._queue_ripple(int(cx), int(cy), 1.4)
+        return True
+
+    def trigger_random_hole(self):
+        """External hook for UI/commands to punch a random hole."""
+        now = self.last_time if self.last_time is not None else time.time()
+        if self._activate_hole(now, force=True):
+            self.last_manual_hole_time = now
 
     def _apply_hole(self, dt: float, time_elapsed: float):
         drained = False
@@ -552,7 +584,9 @@ class FluidTankAnimation(AnimationBase):
             'drain_reference_volume': self.drain_reference_volume,
             'spray_particle_count': len(self.spray_particles),
             'max_bubble_rise': self.max_bubble_rise,
-            'last_spray_time': self.last_spray_time
+            'last_spray_time': self.last_spray_time,
+            'last_manual_hole_time': self.last_manual_hole_time,
+            'drop_glow_count': len(self.drop_glow)
         }
 
         if fill_stats:
@@ -687,6 +721,13 @@ class FluidTankAnimation(AnimationBase):
             if 0 <= sx < width and 0 <= sy < height:
                 key = (sx, sy)
                 spray_cells[key] = max(spray_cells.get(key, 0.0), min(1.0, particle['life']))
+        
+        drop_glow_cells: Dict[Tuple[int, int], float] = {}
+        for glow in self.drop_glow:
+            gx = int(glow['x'])
+            gy = int(glow['y'])
+            if 0 <= gx < width and 0 <= gy < height:
+                drop_glow_cells[(gx, gy)] = max(drop_glow_cells.get((gx, gy), 0.0), glow.get('intensity', 0.0))
 
         pixels: List[Tuple[int, int, int]] = [(0, 0, 0)] * (self.panel_leds_per_strip * self.panel_strips)
 
@@ -696,6 +737,7 @@ class FluidTankAnimation(AnimationBase):
         foam_color = (210, 235, 255)
         hole_flash_color = (140, 220, 255)
         spray_color = (200, 240, 255)
+        drop_color = (180, 220, 255)
 
         shimmer = float(self.params.get('surface_shimmer', 0.35))
         foam_bias = float(self.params.get('foam_bias', 0.25))
@@ -734,6 +776,10 @@ class FluidTankAnimation(AnimationBase):
                 spray_intensity = spray_cells.get((x, y), 0.0)
                 if spray_intensity > 0.0:
                     color = self._mix_color(color, spray_color, min(1.0, spray_intensity * 1.4))
+
+                drop_intensity = drop_glow_cells.get((x, y), 0.0)
+                if drop_intensity > 0.0:
+                    color = self._mix_color(color, drop_color, min(1.0, drop_intensity))
 
                 pixels[idx] = self.apply_brightness(color)
 

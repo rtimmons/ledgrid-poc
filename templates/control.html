@@ -94,6 +94,10 @@
 let currentAnimation = null;
 let parameterUpdateTimeout = null;
 
+function humanizeParamName(name) {
+    return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 // Select and start animation
 function selectAnimation(name) {
     currentAnimation = name;
@@ -135,14 +139,19 @@ function renderParameterControls(schema, currentParams) {
     
     Object.entries(schema).forEach(([paramName, paramInfo]) => {
         const currentValue = currentParams[paramName] || paramInfo.default;
+        const prettyName = humanizeParamName(paramName);
+        const rangeText = (paramInfo.min !== undefined && paramInfo.max !== undefined)
+            ? `Range: ${paramInfo.min} – ${paramInfo.max} (default ${paramInfo.default})`
+            : `Default: ${paramInfo.default ?? '--'}`;
         
         const controlDiv = document.createElement('div');
         controlDiv.className = 'parameter-control';
         
         let controlHtml = `
             <label class="form-label">
-                <strong>${paramName}</strong>
-                <small class="text-muted">${paramInfo.description}</small>
+                <strong>${prettyName}</strong>
+                <small class="text-muted d-block">${paramInfo.description}</small>
+                <small class="text-muted">${rangeText}</small>
             </label>
         `;
         
