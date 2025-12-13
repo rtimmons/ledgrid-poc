@@ -271,6 +271,7 @@
             this.renderTimer = null;
             this.fetchInFlight = false;
             this.lastFrameData = null;
+            this.previewParams = null;
 
             // LED configuration - will be updated from server
             this.stripCount = INITIAL_STRIP_COUNT;
@@ -309,7 +310,16 @@
             try {
                 if (this.previewMode && this.previewAnimation) {
                     // In preview mode, fetch preview data for specific animation
-                    const response = await fetch(`/api/preview/${this.previewAnimation}`);
+                    const hasParams = this.previewParams && Object.keys(this.previewParams).length > 0;
+                    const url = hasParams
+                        ? `/api/preview/${this.previewAnimation}/with_params`
+                        : `/api/preview/${this.previewAnimation}`;
+                    const options = hasParams ? {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.previewParams)
+                    } : undefined;
+                    const response = await fetch(url, options);
                     const data = await response.json();
                     return data;
                 } else {
@@ -324,9 +334,18 @@
             }
         }
 
-        setPreviewAnimation(animationName) {
+        setPreviewAnimation(animationName, params = null) {
             this.previewAnimation = animationName;
+            this.setPreviewParams(params);
             console.log(`Preview animation set to: ${animationName}`);
+        }
+
+        setPreviewParams(params = null) {
+            if (params && typeof params === 'object') {
+                this.previewParams = {...params};
+            } else {
+                this.previewParams = null;
+            }
         }
 
         togglePreviewMode() {
@@ -505,6 +524,7 @@
     let latestStatusJson = '';
     let controlSelectedAnimation = null;
     let controlParameterUpdateTimeout = null;
+    let controlParameterStore = {};
 
     // Initialize renderer when page loads
     document.addEventListener('DOMContentLoaded', function() {
@@ -550,6 +570,9 @@
             if (isPreviewMode) {
                 button.className = 'btn btn-primary btn-sm';
                 buttonText.textContent = 'Live Mode';
+                if (controlSelectedAnimation) {
+                    syncPreviewParameters(controlSelectedAnimation);
+                }
             } else {
                 button.className = 'btn btn-outline-primary btn-sm';
                 buttonText.textContent = 'Preview Mode';
@@ -565,7 +588,8 @@
             }
 
             // Set the animation to preview
-            animationRenderer.setPreviewAnimation(animationName);
+            const params = controlParameterStore[animationName] || null;
+            animationRenderer.setPreviewAnimation(animationName, params);
         }
     }
 
@@ -764,9 +788,25 @@
         });
     }
 
+    function syncPreviewParameters(animationName) {
+        if (!animationRenderer || !animationRenderer.previewMode || !animationName) {
+            return;
+        }
+        const params = controlParameterStore[animationName] || null;
+        if (animationRenderer.previewAnimation !== animationName) {
+            animationRenderer.setPreviewAnimation(animationName, params);
+        } else {
+            animationRenderer.setPreviewParams(params);
+        }
+    }
+
     function selectControlAnimation(name, options = {}) {
         controlSelectedAnimation = name;
         highlightControlSelection(name);
+        if (animationRenderer && animationRenderer.previewMode) {
+            const params = controlParameterStore[name] || null;
+            animationRenderer.setPreviewAnimation(name, params);
+        }
         const { skipStart = false, placeholderMessage = null } = options;
         const message = placeholderMessage || (skipStart
             ? 'Loading controls...'
@@ -833,9 +873,11 @@
         const container = document.getElementById('controlParametersContainer');
         if (!container) return;
         container.innerHTML = '';
+        const parameterSnapshot = {};
 
         Object.entries(schema).forEach(([paramName, paramInfo]) => {
             const currentValue = currentParams[paramName] ?? paramInfo.default;
+            parameterSnapshot[paramName] = currentValue;
             const prettyName = humanizeParamName(paramName);
             const rangeText = (paramInfo.min !== undefined && paramInfo.max !== undefined)
                 ? `Range: ${paramInfo.min} – ${paramInfo.max} (default ${paramInfo.default})`
@@ -895,6 +937,11 @@
             controlDiv.innerHTML = controlHtml;
             container.appendChild(controlDiv);
         });
+
+        if (controlSelectedAnimation) {
+            controlParameterStore[controlSelectedAnimation] = parameterSnapshot;
+            syncPreviewParameters(controlSelectedAnimation);
+        }
     }
 
     function updateControlParameter(name, value, type) {
@@ -918,6 +965,19 @@
         if (controlParameterUpdateTimeout) {
             clearTimeout(controlParameterUpdateTimeout);
         }
+
+        if (controlSelectedAnimation) {
+            if (!controlParameterStore[controlSelectedAnimation]) {
+                controlParameterStore[controlSelectedAnimation] = {};
+            }
+            controlParameterStore[controlSelectedAnimation][name] = convertedValue;
+            if (animationRenderer &&
+                animationRenderer.previewMode &&
+                animationRenderer.previewAnimation === controlSelectedAnimation) {
+                animationRenderer.setPreviewParams(controlParameterStore[controlSelectedAnimation]);
+            }
+        }
+
         controlParameterUpdateTimeout = setTimeout(() => {
             const params = {};
             params[name] = convertedValue;
