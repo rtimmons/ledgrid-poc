@@ -49,6 +49,26 @@
             font-family: 'Courier New', monospace;
             font-size: 14px;
         }
+
+        @media (min-width: 992px) {
+            .sticky-preview {
+                position: sticky;
+                top: 1rem;
+            }
+        }
+
+        .preview-canvas {
+            display: block;
+            margin: 0 auto;
+            width: 75%;
+            max-width: 100%;
+        }
+
+        @media (max-width: 991.98px) {
+            .preview-canvas {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>

@@ -4,128 +4,149 @@
 
 {% block content %}
 <div class="row mb-4">
-    <div class="col-lg-4 mb-4 mb-lg-0">
-        <div class="card mb-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-tv"></i> Live Preview</h5>
-                <div class="btn-group btn-group-sm" role="group">
-                    <button type="button" class="btn btn-outline-secondary" id="toggleRenderer" onclick="toggleRenderer()">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="resetRenderer()">
-                        <i class="fas fa-sync"></i>
-                    </button>
-                    <button type="button" class="btn btn-outline-primary" id="previewToggle" onclick="togglePreviewMode()">
-                        <i class="fas fa-search"></i> <span id="previewToggleText">Preview Mode</span>
-                    </button>
+    <div class="col-lg-4 mb-4 mb-lg-0 order-1 order-lg-2">
+        <div class="sticky-preview">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tv"></i> Live Preview</h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#previewCollapse" aria-expanded="true" aria-controls="previewCollapse">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="toggleRenderer" onclick="toggleRenderer()">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetRenderer()">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" id="previewToggle" onclick="togglePreviewMode()">
+                            <i class="fas fa-search"></i> <span id="previewToggleText">Preview Mode</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="previewCollapse" class="collapse show">
+                    <div class="card-body" id="rendererContainer">
+                        <div id="animationRenderer" class="text-center">
+                            <canvas id="ledCanvas" width="315" height="630" class="led-preview preview-canvas" style="border: 1px solid #ddd; border-radius: 8px; cursor: pointer;"></canvas>
+                            <div class="mt-2">
+                                <small class="text-muted d-block mb-1">
+                                    Canvas rotated to match the physical panel. Click to punch a random hole instantly.
+                                </small>
+                                <small class="text-muted">
+                                    <span id="rendererStatus">Waiting for animation...</span> |
+                                    <span id="rendererFPS">0 FPS</span> |
+                                    <span id="rendererFrameCount">0 frames</span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="card-body" id="rendererContainer">
-                <div id="animationRenderer" class="text-center">
-                    <canvas id="ledCanvas" width="420" height="840" class="led-preview w-100" style="border: 1px solid #ddd; border-radius: 8px; max-width: 100%; cursor: pointer;"></canvas>
-                    <div class="mt-2">
-                        <small class="text-muted d-block mb-1">
-                            Canvas rotated to match the physical panel. Click to punch a random hole instantly.
-                        </small>
-                        <small class="text-muted">
-                            <span id="rendererStatus">Waiting for animation...</span> |
-                            <span id="rendererFPS">0 FPS</span> |
-                            <span id="rendererFrameCount">0 frames</span>
+
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tint"></i> Scene Stats</h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#statsCollapse" aria-expanded="true" aria-controls="statsCollapse">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="requestRandomHole()">
+                            <i class="fas fa-bolt"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="statsCollapse" class="collapse show">
+                    <div class="card-body small">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <span>Fill Level</span>
+                            <strong id="statFill">--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <span>Expected Level</span>
+                            <strong id="statExpected">--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <span>Hole Active</span>
+                            <strong id="statHole">--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <span>Bubbles (peak rise)</span>
+                            <strong id="statBubbles">--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <span>Spray Particles</span>
+                            <strong id="statSpray">--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <span>Spawn Allowed</span>
+                            <strong id="statSpawnAllowed">--</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Animation Hash</span>
+                            <code id="statHash">--</code>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            Stats update from <code>/api/status</code> so sims + hardware stay in sync.
                         </small>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fas fa-tint"></i> Scene Stats</h5>
-                <button class="btn btn-sm btn-outline-danger" onclick="requestRandomHole()">
-                    <i class="fas fa-bolt"></i>
-                </button>
-            </div>
-            <div class="card-body small">
-                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-                    <span>Fill Level</span>
-                    <strong id="statFill">--</strong>
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> System Status</h5>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#systemCollapse" aria-expanded="true" aria-controls="systemCollapse">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-                    <span>Expected Level</span>
-                    <strong id="statExpected">--</strong>
-                </div>
-                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-                    <span>Hole Active</span>
-                    <strong id="statHole">--</strong>
-                </div>
-                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-                    <span>Bubbles (peak rise)</span>
-                    <strong id="statBubbles">--</strong>
-                </div>
-                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-                    <span>Spray Particles</span>
-                    <strong id="statSpray">--</strong>
-                </div>
-                <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
-                    <span>Spawn Allowed</span>
-                    <strong id="statSpawnAllowed">--</strong>
-                </div>
-                <div class="d-flex justify-content-between align-items-center">
-                    <span>Animation Hash</span>
-                    <code id="statHash">--</code>
-                </div>
-                <small class="text-muted d-block mt-2">
-                    Stats update from <code>/api/status</code> so sims + hardware stay in sync.
-                </small>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-header">
-                <h5><i class="fas fa-info-circle"></i> System Status</h5>
-            </div>
-            <div class="card-body">
-                <div class="mb-2">
-                    <strong>Animation:</strong><br>
-                    <span class="status-indicator {{ 'status-running' if status.is_running else 'status-stopped' }}"></span>
-                    <span class="status-text">
+                <div id="systemCollapse" class="collapse show">
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <strong>Animation:</strong><br>
+                            <span class="status-indicator {{ 'status-running' if status.is_running else 'status-stopped' }}"></span>
+                            <span class="status-text">
+                                {% if status.is_running %}
+                                    Running: {{ status.current_animation }}
+                                {% else %}
+                                    Stopped
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>Performance:</strong><br>
+                            <span class="fps-display">{{ "%.1f"|format(status.actual_fps) }} FPS</span>
+                            <small class="text-muted">(Target: {{ status.target_fps }} FPS)</small>
+                        </div>
+                        <div class="mb-2">
+                            <strong>LED Configuration:</strong><br>
+                            {{ status.led_info.strip_count }} strips × {{ status.led_info.leds_per_strip }} LEDs
+                        </div>
                         {% if status.is_running %}
-                            Running: {{ status.current_animation }}
-                        {% else %}
-                            Stopped
+                        <div class="mb-2">
+                            <strong>Runtime:</strong><br>
+                            {{ "%.1f"|format(status.uptime) }}s
+                            <small class="text-muted">({{ status.frame_count }} frames)</small>
+                        </div>
                         {% endif %}
-                    </span>
-                </div>
-                <div class="mb-2">
-                    <strong>Performance:</strong><br>
-                    <span class="fps-display">{{ "%.1f"|format(status.actual_fps) }} FPS</span>
-                    <small class="text-muted">(Target: {{ status.target_fps }} FPS)</small>
-                </div>
-                <div class="mb-2">
-                    <strong>LED Configuration:</strong><br>
-                    {{ status.led_info.strip_count }} strips × {{ status.led_info.leds_per_strip }} LEDs
-                </div>
-                {% if status.is_running %}
-                <div class="mb-2">
-                    <strong>Runtime:</strong><br>
-                    {{ "%.1f"|format(status.uptime) }}s
-                    <small class="text-muted">({{ status.frame_count }} frames)</small>
-                </div>
-                {% endif %}
-                <div class="d-grid gap-2">
-                    {% if status.is_running %}
-                    <button class="btn btn-danger" onclick="stopAnimation()">
-                        <i class="fas fa-stop"></i> Stop Animation
-                    </button>
-                    {% endif %}
-                    <button class="btn btn-outline-secondary" onclick="refreshPlugins()">
-                        <i class="fas fa-sync"></i> Refresh Plugins
-                    </button>
+                        <div class="d-grid gap-2">
+                            {% if status.is_running %}
+                            <button class="btn btn-danger" onclick="stopAnimation()">
+                                <i class="fas fa-stop"></i> Stop Animation
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-outline-secondary" onclick="refreshPlugins()">
+                                <i class="fas fa-sync"></i> Refresh Plugins
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-lg-8">
+    <div class="col-lg-8 order-2 order-lg-1">
         <div class="card">
             <div class="card-header pb-0">
                 <ul class="nav nav-tabs card-header-tabs" id="dashboardTabs" role="tablist">
@@ -196,12 +217,15 @@
                             </button>
                         </div>
                     </div>
-                    <div class="card" id="controlParametersCard" style="display: none;">
+                    <div class="card mt-3" id="controlParametersCard" style="display: none;">
                         <div class="card-header">
                             <h6 class="mb-0">Animation Parameters</h6>
                             <small class="text-muted">Adjust values to steer the scene in real-time.</small>
                         </div>
                         <div class="card-body" id="controlParametersContainer"></div>
+                    </div>
+                    <div class="alert alert-info mt-3" id="controlParametersPlaceholder">
+                        Start or select an animation to adjust its live controls.
                     </div>
                 </div>
                 <div class="tab-pane fade" id="tab-status" role="tabpanel">
@@ -226,6 +250,7 @@
 <script>
     const INITIAL_STRIP_COUNT = {{ status.led_info.strip_count | default(8) }};
     const INITIAL_LEDS_PER_STRIP = {{ status.led_info.leds_per_strip | default(140) }};
+    const INITIAL_STATUS = {{ status | tojson }};
 
     // Animation Renderer
     class LEDAnimationRenderer {
@@ -484,6 +509,9 @@
     // Initialize renderer when page loads
     document.addEventListener('DOMContentLoaded', function() {
         animationRenderer = new LEDAnimationRenderer('ledCanvas');
+        if (INITIAL_STATUS) {
+            syncControlPanel(INITIAL_STATUS);
+        }
         startStatsPolling();
     });
 
@@ -599,6 +627,7 @@
             latestStatusJson = JSON.stringify(data, null, 2);
             updateSceneStatsPanel(data);
             updateStatusJson(data);
+            syncControlPanel(data);
         } catch (err) {
             console.error('Failed to fetch stats', err);
         }
@@ -616,7 +645,16 @@
         safeSetText('statBubbles', bubbleLabel);
         safeSetText('statSpray', stats.spray_particle_count != null ? stats.spray_particle_count : '--');
         safeSetText('statSpawnAllowed', stats.spawn_allowed === false ? 'Paused' : 'Yes');
-        safeSetText('statHash', payload.animation_hash || '--');
+        const hashValue = payload.animation_hash || '';
+        let shortHash = '--';
+        if (hashValue) {
+            shortHash = hashValue.length > 15 ? `${hashValue.slice(0, 15)}…` : hashValue;
+        }
+        safeSetText('statHash', shortHash);
+        const hashEl = document.getElementById('statHash');
+        if (hashEl) {
+            hashEl.title = hashValue || 'No hash available';
+        }
     }
 
     function updateStatusJson(payload) {
@@ -668,35 +706,127 @@
         return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     }
 
+    function showControlPlaceholder(message, options = {}) {
+        const placeholder = document.getElementById('controlParametersPlaceholder');
+        const card = document.getElementById('controlParametersCard');
+        if (options.clearControls) {
+            const container = document.getElementById('controlParametersContainer');
+            if (container) {
+                container.innerHTML = '';
+            }
+        }
+        if (placeholder) {
+            placeholder.textContent = message;
+            placeholder.style.display = 'block';
+        }
+        if (card) {
+            card.style.display = 'none';
+        }
+    }
+
+    function hideControlPlaceholder() {
+        const placeholder = document.getElementById('controlParametersPlaceholder');
+        const card = document.getElementById('controlParametersCard');
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        if (card) {
+            card.style.display = 'block';
+        }
+    }
+
+    function syncControlPanel(status) {
+        if (!status) return;
+        const runningAnimation = status.is_running ? status.current_animation : null;
+        if (!runningAnimation) {
+            if (controlSelectedAnimation !== null) {
+                controlSelectedAnimation = null;
+                highlightControlSelection(null);
+            }
+            showControlPlaceholder('Start or select an animation to adjust its live controls.', {clearControls: true});
+            return;
+        }
+        if (controlSelectedAnimation === runningAnimation) {
+            return;
+        }
+        controlSelectedAnimation = runningAnimation;
+        highlightControlSelection(runningAnimation);
+        loadControlParameters(runningAnimation, {
+            placeholderMessage: `Loading controls for ${humanizeParamName(runningAnimation)}...`
+        });
+    }
+
     function highlightControlSelection(name) {
         document.querySelectorAll('.control-animation-btn').forEach(btn => {
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-outline-primary');
-            if (btn.dataset.animation === name) {
-                btn.classList.remove('btn-outline-primary');
-                btn.classList.add('btn-primary');
-            }
+            const isActive = Boolean(name && btn.dataset.animation === name);
+            btn.classList.toggle('btn-primary', isActive);
+            btn.classList.toggle('btn-outline-primary', !isActive);
         });
     }
 
     function selectControlAnimation(name, options = {}) {
         controlSelectedAnimation = name;
         highlightControlSelection(name);
-        const shouldStart = !(options && options.skipStart);
-        const startPromise = shouldStart ? startAnimation(name) : Promise.resolve({success: true});
-        startPromise.then(() => loadControlParameters(name));
+        const { skipStart = false, placeholderMessage = null } = options;
+        const message = placeholderMessage || (skipStart
+            ? 'Loading controls...'
+            : 'Starting animation and loading controls...');
+        showControlPlaceholder(message, {clearControls: true});
+        const startPromise = skipStart ? Promise.resolve({success: true}) : startAnimation(name);
+        startPromise.then(result => {
+            if (result.success) {
+                loadControlParameters(name, {showPlaceholder: false});
+            } else {
+                controlSelectedAnimation = null;
+                highlightControlSelection(null);
+                showControlPlaceholder('Unable to load controls. Start the animation to try again.', {clearControls: true});
+            }
+        }).catch(error => {
+            console.error('Failed to select animation', error);
+            controlSelectedAnimation = null;
+            highlightControlSelection(null);
+            showControlPlaceholder('Unable to load controls right now.', {clearControls: true});
+        });
     }
 
-    function loadControlParameters(name) {
+    function loadControlParameters(name, options = {}) {
+        const { showPlaceholder = true, placeholderMessage = null } = options;
+        if (showPlaceholder) {
+            showControlPlaceholder(placeholderMessage || 'Loading controls...', {clearControls: true});
+        }
         fetch(`/api/animations/${name}`)
             .then(r => r.json())
             .then(info => {
-                if (info && info.parameters) {
+                if (info && info.parameters && Object.keys(info.parameters).length) {
                     renderControlParameterControls(info.parameters, info.current_params || {});
-                    document.getElementById('controlParametersCard').style.display = 'block';
+                    hideControlPlaceholder();
+                } else {
+                    showControlPlaceholder('This animation does not expose live controls.', {clearControls: true});
                 }
             })
-            .catch(console.error);
+            .catch(error => {
+                console.error('Failed to load controls', error);
+                showControlPlaceholder('Failed to load controls. Please try again.', {clearControls: true});
+            });
+    }
+
+    function handleRangeInput(name, value, type, mirrorInputId) {
+        const mirror = document.getElementById(mirrorInputId);
+        if (mirror) {
+            mirror.value = value;
+        }
+        updateControlParameter(name, value, type);
+    }
+
+    function handleNumberInput(name, value, type, mirrorSliderId) {
+        if (value === '' || value === null) {
+            return;
+        }
+        const slider = document.getElementById(mirrorSliderId);
+        if (slider) {
+            slider.value = value;
+        }
+        updateControlParameter(name, value, type);
     }
 
     function renderControlParameterControls(schema, currentParams) {
@@ -713,6 +843,7 @@
             const controlDiv = document.createElement('div');
             controlDiv.className = 'parameter-control mb-3';
             const inputId = `control-${paramName}`;
+            const numberInputId = `${inputId}-value`;
             let controlHtml = `
                 <label class="form-label mb-1">
                     <strong>${prettyName}</strong>
@@ -731,7 +862,7 @@
                                    max="${paramInfo.max}"
                                    step="${step}"
                                    value="${currentValue}"
-                                   oninput="updateControlParameter('${paramName}', this.value, '${paramInfo.type}')">
+                                   oninput="handleRangeInput('${paramName}', this.value, '${paramInfo.type}', '${numberInputId}')">
                         </div>
                         <div class="col-4">
                             <input type="number" class="form-control form-control-sm"
@@ -739,7 +870,8 @@
                                    min="${paramInfo.min}"
                                    max="${paramInfo.max}"
                                    step="${step}"
-                                   onchange="updateControlParameter('${paramName}', this.value, '${paramInfo.type}'); document.getElementById('${inputId}').value = this.value;">
+                                   id="${numberInputId}"
+                                   oninput="handleNumberInput('${paramName}', this.value, '${paramInfo.type}', '${inputId}')">
                         </div>
                     </div>
                 `;
@@ -772,7 +904,15 @@
         } else if (type === 'float') {
             convertedValue = parseFloat(value);
         } else if (type === 'bool') {
-            convertedValue = Boolean(value);
+            if (typeof value === 'string') {
+                convertedValue = value === 'true' || value === '1';
+            } else {
+                convertedValue = Boolean(value);
+            }
+        }
+
+        if ((type === 'int' || type === 'float') && Number.isNaN(convertedValue)) {
+            return;
         }
 
         if (controlParameterUpdateTimeout) {

@@ -16,6 +16,11 @@ from werkzeug.utils import secure_filename
 from animation_manager import AnimationManager, PreviewLEDController
 from control_channel import FileControlChannel
 from led_layout import DEFAULT_STRIP_COUNT, DEFAULT_LEDS_PER_STRIP
+from frame_data_codec import (
+    decode_frame_data,
+    encode_frame_data,
+    FRAME_ENCODING_NAME,
+)
 
 
 class AnimationWebInterface:
@@ -112,7 +117,7 @@ class AnimationWebInterface:
         @self.app.route('/api/frame')
         def api_get_frame():
             """API: Get current animation frame data"""
-            return jsonify(self._status_payload())
+            return jsonify(self._status_payload(decode_frame=True))
 
         @self.app.route('/api/preview/<animation_name>')
         def api_get_preview(animation_name):
@@ -254,7 +259,7 @@ class AnimationWebInterface:
         
         self.app.run(host=self.host, port=self.port, debug=debug, threaded=True)
 
-    def _status_payload(self) -> Dict[str, Any]:
+    def _status_payload(self, decode_frame: bool = False) -> Dict[str, Any]:
         """Normalize the controller status so every consumer sees the same structure."""
         raw_status = self.control_channel.read_status()
         if not raw_status:
@@ -268,7 +273,6 @@ class AnimationWebInterface:
         }
 
         status.setdefault('led_info', default_led_info)
-        status.setdefault('frame_data', raw_status.get('frame_data', []))
         stats = status.get('animation_stats') or status.get('stats') or {}
         status['animation_stats'] = stats
         status['stats'] = stats
@@ -285,6 +289,34 @@ class AnimationWebInterface:
         if not timestamp:
             timestamp = time.time()
         status['timestamp'] = timestamp
+
+        encoded_frame = raw_status.get('frame_data_encoded')
+        raw_frame_list = raw_status.get('frame_data')
+        frame_length = raw_status.get('frame_data_length')
+
+        if isinstance(raw_frame_list, list):
+            frame_length = len(raw_frame_list)
+            if not encoded_frame:
+                encoded_frame = encode_frame_data(raw_frame_list)
+        elif isinstance(raw_frame_list, str) and not encoded_frame:
+            # Backwards compatibility: some snapshots may have stored the encoded
+            # string under frame_data.
+            encoded_frame = raw_frame_list
+
+        status['frame_data_encoded'] = encoded_frame or ''
+        status['frame_data_length'] = frame_length or 0
+        status['frame_encoding'] = raw_status.get('frame_encoding') or (
+            FRAME_ENCODING_NAME if encoded_frame else None
+        )
+
+        if decode_frame:
+            if isinstance(raw_frame_list, list):
+                status['frame_data'] = raw_frame_list
+            else:
+                status['frame_data'] = decode_frame_data(encoded_frame or '')
+        else:
+            status['frame_data'] = []
+
         return status
 
     def _empty_status(self):
@@ -306,6 +338,9 @@ class AnimationWebInterface:
                 'leds_per_strip': self.preview_manager.controller.leds_per_strip
             },
             'frame_data': [],
+            'frame_data_encoded': '',
+            'frame_data_length': 0,
+            'frame_encoding': None,
             'timestamp': time.time()
         }
 

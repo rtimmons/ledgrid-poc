@@ -16,6 +16,7 @@ from pathlib import Path
 
 from animation_system import AnimationBase, StatefulAnimationBase, AnimationPluginLoader
 from led_layout import DEFAULT_STRIP_COUNT, DEFAULT_LEDS_PER_STRIP
+from frame_data_codec import encode_frame_data, FRAME_ENCODING_NAME
 
 # Try to import the real LED controller, fall back to mock for testing
 try:
@@ -356,8 +357,12 @@ class AnimationManager:
         with self.frame_data_lock:
             frame_data = list(self.current_frame_data)
 
+        encoded_frame = encode_frame_data(frame_data)
+
         return {
-            'frame_data': frame_data,
+            'frame_data_encoded': encoded_frame,
+            'frame_data_length': len(frame_data),
+            'frame_encoding': FRAME_ENCODING_NAME if encoded_frame else None,
             'led_info': {
                 'total_leds': self.controller.total_leds,
                 'strip_count': self.controller.strip_count,
