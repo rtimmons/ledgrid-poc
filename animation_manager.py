@@ -91,6 +91,7 @@ class AnimationManager:
     ALLOWED_PLUGINS = {
         "rainbow",
         "emoji",
+        "emoji_arranger",
         "sparkle",
         "fluid_tank",
         "flame_burst",
@@ -432,6 +433,75 @@ class AnimationManager:
                 'current_animation': animation_name,
                 'timestamp': time.time(),
                 'preview': True,
+                'error': str(e)
+            }
+
+    def get_animation_preview_with_params(self, animation_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Get a preview frame from a specific animation with custom parameters"""
+        if animation_name not in self.plugin_loader.loaded_plugins:
+            raise ValueError(f"Animation '{animation_name}' not found")
+
+        animation_class = self.plugin_loader.loaded_plugins[animation_name]
+
+        # Keep preview controller dimensions in sync with the real controller
+        self.preview_controller.strip_count = self.controller.strip_count
+        self.preview_controller.leds_per_strip = self.controller.leds_per_strip
+        self.preview_controller.total_leds = self.controller.total_leds
+
+        try:
+            # Create a temporary instance of the animation with custom parameters
+            temp_animation = animation_class(self.preview_controller, params)
+
+            # Generate a sample frame
+            if hasattr(temp_animation, 'generate_frame'):
+                # For frame-based animations
+                frame_data = temp_animation.generate_frame(time_elapsed=0.0, frame_count=0)
+                if frame_data is None:
+                    frame_data = [(0, 0, 0)] * self.controller.total_leds
+            else:
+                # For step-based animations, run a few steps
+                temp_animation.reset()
+                for _ in range(5):  # Run a few steps to get interesting output
+                    temp_animation.step()
+
+                # Get the current state
+                frame_data = [(0, 0, 0)] * self.controller.total_leds
+                if hasattr(temp_animation, 'get_current_colors'):
+                    frame_data = temp_animation.get_current_colors()
+
+            frame_data = self._normalize_frame(frame_data)
+
+            return {
+                'frame_data': frame_data,
+                'led_info': {
+                    'total_leds': self.controller.total_leds,
+                    'strip_count': self.controller.strip_count,
+                    'leds_per_strip': self.controller.leds_per_strip
+                },
+                'is_running': False,
+                'frame_count': 0,
+                'current_animation': animation_name,
+                'timestamp': time.time(),
+                'preview': True,
+                'params': params
+            }
+
+        except Exception as e:
+            print(f"Error generating preview with params for {animation_name}: {e}")
+            # Return a default pattern
+            return {
+                'frame_data': [(50, 50, 50)] * self.controller.total_leds,  # Dim gray
+                'led_info': {
+                    'total_leds': self.controller.total_leds,
+                    'strip_count': self.controller.strip_count,
+                    'leds_per_strip': self.controller.leds_per_strip
+                },
+                'is_running': False,
+                'frame_count': 0,
+                'current_animation': animation_name,
+                'timestamp': time.time(),
+                'preview': True,
+                'params': params,
                 'error': str(e)
             }
 

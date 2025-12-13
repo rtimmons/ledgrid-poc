@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+
+{% block title %}Emoji Arranger - LED Grid{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <h2><i class="fas fa-smile"></i> Emoji Arranger</h2>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5>Text Input</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="textInput" class="form-label">Enter text to display:</label>
+                    <textarea class="form-control" id="textInput" rows="3" placeholder="Type your message here... Use emojis, letters A-Z, and numbers 0-9">HI🔥</textarea>
+                    <small class="text-muted">Supported: 🍆🔥🤖👀👻🌈 A-Z 0-9 | <strong>Note:</strong> Only first 8 columns are active on hardware</small>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <button class="btn btn-primary w-100" onclick="updateText()">
+                            <i class="fas fa-play"></i> Display Text
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <button class="btn btn-secondary w-100" onclick="clearText()">
+                            <i class="fas fa-eraser"></i> Clear
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-info btn-sm w-100" onclick="insertEmoji('🍆')">🍆</button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-info btn-sm w-100" onclick="insertEmoji('🔥')">🔥</button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-info btn-sm w-100" onclick="insertEmoji('🤖')">🤖</button>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-info btn-sm w-100" onclick="insertEmoji('👀')">👀</button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-info btn-sm w-100" onclick="insertEmoji('👻')">👻</button>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-info btn-sm w-100" onclick="insertEmoji('🌈')">🌈</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Display Settings</h5>
+            </div>
+            <div class="card-body" id="settingsContainer">
+                <!-- Settings will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Preview</h5>
+            </div>
+            <div class="card-body" id="rendererContainer">
+                <div id="animationRenderer" class="text-center">
+                    <canvas id="ledCanvas" width="840" height="420" class="led-preview w-100" style="border: 1px solid #ddd; border-radius: 8px; max-width: 100%; cursor: pointer;"></canvas>
+                    <div class="mt-2">
+                        <small class="text-muted d-block mb-1">
+                            Live preview of your emoji arrangement
+                        </small>
+                        <small class="text-muted">
+                            <span id="rendererStatus">Ready</span> |
+                            <span id="rendererFPS">0 FPS</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Quick Presets</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('HELLO🔥')">Hello Fire</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('🤖AI🤖')">Robot AI</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('👀👻🌈')">Spooky Rainbow</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('ABC123')">ABC 123</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadPreset('🍆🔥🤖👀👻🌈')">All Emojis</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Global variables
+let currentAnimation = 'emoji_arranger';
+let animationRenderer = null;
+let parameterUpdateTimeout = null;
+let currentParams = {}; // Track current parameters for preview
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    animationRenderer = new LEDAnimationRenderer('ledCanvas');
+    startEmojiArranger();
+    loadSettings();
+});
+
+// Start the emoji arranger animation
+function startEmojiArranger() {
+    fetch('/api/start/emoji_arranger', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: document.getElementById('textInput').value})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            console.log('Emoji arranger started');
+        }
+    })
+    .catch(console.error);
+}
+
+// Update text display
+function updateText() {
+    const text = document.getElementById('textInput').value;
+    updateParameter('text', text);
+}
+
+// Clear text
+function clearText() {
+    document.getElementById('textInput').value = '';
+    updateParameter('text', '');
+}
+
+// Insert emoji at cursor
+function insertEmoji(emoji) {
+    const textArea = document.getElementById('textInput');
+    const start = textArea.selectionStart;
+    const end = textArea.selectionEnd;
+    const text = textArea.value;
+    
+    textArea.value = text.substring(0, start) + emoji + text.substring(end);
+    textArea.focus();
+    textArea.setSelectionRange(start + emoji.length, start + emoji.length);
+}
+
+// Load preset text
+function loadPreset(text) {
+    document.getElementById('textInput').value = text;
+    updateText();
+}
+
+// Load animation settings
+function loadSettings() {
+    fetch('/api/animations/emoji_arranger')
+        .then(r => r.json())
+        .then(info => {
+            if (info.parameters) {
+                renderSettingsControls(info.parameters, info.current_params);
+            }
+        })
+        .catch(console.error);
+}
+
+// Render settings controls
+function renderSettingsControls(schema, serverParams) {
+    const container = document.getElementById('settingsContainer');
+    container.innerHTML = '';
+
+    // Initialize currentParams with values from server
+    currentParams = {...serverParams};
+
+    // Skip the 'text' parameter as it's handled separately
+    const settingsParams = Object.fromEntries(
+        Object.entries(schema).filter(([key]) => key !== 'text')
+    );
+
+    Object.entries(settingsParams).forEach(([paramName, paramInfo]) => {
+        const currentValue = serverParams[paramName] || paramInfo.default;
+        const prettyName = humanizeParamName(paramName);
+
+        const controlDiv = document.createElement('div');
+        controlDiv.className = 'mb-3';
+
+        let controlHtml = `
+            <label class="form-label">
+                <strong>${prettyName}</strong>
+                <small class="text-muted d-block">${paramInfo.description}</small>
+            </label>
+        `;
+
+        if (paramInfo.type === 'float' || paramInfo.type === 'int') {
+            const step = paramInfo.type === 'float' ? '0.1' : '1';
+            controlHtml += `
+                <div class="row">
+                    <div class="col-8">
+                        <input type="range" class="form-range"
+                               id="${paramName}"
+                               min="${paramInfo.min}"
+                               max="${paramInfo.max}"
+                               step="${step}"
+                               value="${currentValue}"
+                               oninput="updateParameter('${paramName}', this.value, '${paramInfo.type}')">
+                    </div>
+                    <div class="col-4">
+                        <input type="number" class="form-control form-control-sm"
+                               value="${currentValue}"
+                               min="${paramInfo.min}"
+                               max="${paramInfo.max}"
+                               step="${step}"
+                               onchange="updateParameter('${paramName}', this.value, '${paramInfo.type}'); document.getElementById('${paramName}').value = this.value;">
+                    </div>
+                </div>
+            `;
+        } else if (paramInfo.type === 'bool') {
+            controlHtml += `
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input"
+                           id="${paramName}"
+                           ${currentValue ? 'checked' : ''}
+                           onchange="updateParameter('${paramName}', this.checked, 'bool')">
+                    <label class="form-check-label" for="${paramName}">Enable</label>
+                </div>
+            `;
+        }
+
+        controlDiv.innerHTML = controlHtml;
+        container.appendChild(controlDiv);
+    });
+}
+
+// Update parameter with debouncing
+function updateParameter(name, value, type = 'str') {
+    // Convert value to appropriate type
+    let convertedValue = value;
+    if (type === 'int') {
+        convertedValue = parseInt(value);
+    } else if (type === 'float') {
+        convertedValue = parseFloat(value);
+    } else if (type === 'bool') {
+        convertedValue = Boolean(value);
+    }
+
+    // Update current parameters for preview
+    currentParams[name] = convertedValue;
+
+    // Clear existing timeout
+    if (parameterUpdateTimeout) {
+        clearTimeout(parameterUpdateTimeout);
+    }
+
+    // Set new timeout for debounced update
+    parameterUpdateTimeout = setTimeout(() => {
+        const params = {};
+        params[name] = convertedValue;
+
+        // Send to hardware controller (for when it's running)
+        fetch('/api/parameters', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(params)
+        })
+        .then(r => r.json())
+        .then(result => {
+            if (!result.success) {
+                console.error('Failed to update parameter:', name);
+            }
+        })
+        .catch(console.error);
+    }, 100); // 100ms debounce
+}
+
+// Humanize parameter names
+function humanizeParamName(name) {
+    return name.split('_').map(word =>
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+}
+</script>
+
+<!-- Include the LED renderer from the main page -->
+<script>
+// Copy the LEDAnimationRenderer class from index.html
+// This is a simplified version for the emoji arranger
+class LEDAnimationRenderer {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.stripCount = 8;
+        this.ledsPerStrip = 140;
+        this.ledSize = 6;
+        this.ledSpacing = 0.5;
+        this.stripSpacing = 1;
+
+        this.setupCanvas();
+        this.startRendering();
+    }
+
+    setupCanvas() {
+        const totalWidth = this.ledsPerStrip * (this.ledSize + this.ledSpacing);
+        const totalHeight = this.stripCount * (this.ledSize + this.stripSpacing);
+
+        this.scaleX = this.canvas.width / totalWidth;
+        this.scaleY = this.canvas.height / totalHeight;
+        this.scale = Math.min(this.scaleX, this.scaleY);
+
+        this.actualLedSize = Math.max(1, this.ledSize * this.scale);
+        this.actualLedSpacing = this.ledSpacing * this.scale;
+        this.actualStripSpacing = this.stripSpacing * this.scale;
+    }
+
+    startRendering() {
+        this.renderLoop();
+    }
+
+    async renderLoop() {
+        try {
+            // Use parameterized preview API for emoji_arranger during development
+            const response = await fetch('/api/preview/emoji_arranger/with_params', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(currentParams)
+            });
+            const frameData = await response.json();
+            this.renderFrame(frameData);
+        } catch (error) {
+            console.error('Render error:', error);
+            this.renderNoAnimation();
+        }
+
+        setTimeout(() => this.renderLoop(), 100); // ~10 FPS
+    }
+
+    renderFrame(frameData) {
+        if (!frameData || !frameData.frame_data) {
+            this.renderNoAnimation();
+            return;
+        }
+
+        // Clear canvas
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Render LEDs
+        const colors = frameData.frame_data;
+        for (let strip = 0; strip < this.stripCount; strip++) {
+            for (let led = 0; led < this.ledsPerStrip; led++) {
+                const pixelIndex = strip * this.ledsPerStrip + led;
+                if (pixelIndex < colors.length) {
+                    const [r, g, b] = colors[pixelIndex];
+                    // Dim inactive columns (beyond first 8)
+                    const isActive = led < 8;
+                    this.renderLED(strip, led, r, g, b, isActive);
+                }
+            }
+        }
+    }
+
+    renderLED(strip, led, r, g, b, isActive = true) {
+        const x = led * (this.actualLedSize + this.actualLedSpacing);
+        const y = strip * (this.actualLedSize + this.actualStripSpacing);
+
+        if (!isActive) {
+            // Dim inactive columns
+            r = Math.floor(r * 0.2);
+            g = Math.floor(g * 0.2);
+            b = Math.floor(b * 0.2);
+        }
+
+        this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        this.ctx.fillRect(x, y, this.actualLedSize, this.actualLedSize);
+
+        // Add border to show active vs inactive columns
+        if (led === 7) { // Right edge of active area
+            this.ctx.strokeStyle = '#ffff00';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(x + this.actualLedSize, y, 1, this.actualLedSize);
+        }
+    }
+
+    renderNoAnimation() {
+        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Show active column boundary
+        const activeWidth = 8 * (this.actualLedSize + this.actualLedSpacing);
+        this.ctx.strokeStyle = '#ffff00';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(0, 0, activeWidth, this.canvas.height);
+
+        // Add text label
+        this.ctx.fillStyle = '#ffff00';
+        this.ctx.font = '12px Arial';
+        this.ctx.fillText('Active Area (8 columns)', 5, 15);
+    }
+}
+</script>
+{% endblock %}

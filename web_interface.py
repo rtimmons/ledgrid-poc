@@ -134,6 +134,27 @@ class AnimationWebInterface:
                     'frame_count': 0,
                     'timestamp': time.time()
                 }), 500
+
+        @self.app.route('/api/preview/<animation_name>/with_params', methods=['POST'])
+        def api_get_preview_with_params(animation_name):
+            """API: Get preview frame data for a specific animation with custom parameters"""
+            try:
+                params = request.get_json() or {}
+                preview_data = self.preview_manager.get_animation_preview_with_params(animation_name, params)
+                return jsonify(preview_data)
+            except Exception as e:
+                return jsonify({
+                    'error': f'Failed to get preview for {animation_name}: {str(e)}',
+                    'frame_data': [],
+                    'led_info': {
+                        'total_leds': self.preview_manager.controller.total_leds,
+                        'strip_count': self.preview_manager.controller.strip_count,
+                        'leds_per_strip': self.preview_manager.controller.leds_per_strip
+                    },
+                    'is_running': False,
+                    'frame_count': 0,
+                    'timestamp': time.time()
+                }), 500
         
         @self.app.route('/api/parameters', methods=['POST'])
         def api_update_parameters():
@@ -217,12 +238,18 @@ class AnimationWebInterface:
             animations = self.preview_manager.list_animations()
             status = self._status_payload()
             return render_template('control.html', animations=animations, status=status)
+
+        @self.app.route('/emoji')
+        def emoji_arranger_page():
+            """Emoji arranger page"""
+            return render_template('emoji_arranger.html')
     
     def run(self, debug=False):
         """Start the web server"""
         print(f"🌐 Starting web interface at http://{self.host}:{self.port}")
         print(f"   Dashboard: http://{self.host}:{self.port}/")
         print(f"   Control:   http://{self.host}:{self.port}/control")
+        print(f"   Emoji:     http://{self.host}:{self.port}/emoji")
         print(f"   Upload:    http://{self.host}:{self.port}/upload")
         
         self.app.run(host=self.host, port=self.port, debug=debug, threaded=True)
@@ -328,6 +355,8 @@ if __name__ == '__main__':
     
     # Create and run web interface
     web_interface = create_app(
+        host=args.host,
+        port=args.port,
         strips=args.strips,
         leds_per_strip=args.leds_per_strip,
         animation_speed_scale=args.animation_speed_scale
